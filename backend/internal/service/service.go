@@ -25,6 +25,8 @@ type ChatService interface {
 
 // Container holds instantiated services
 type Container struct {
+	Auth     AuthService
+	OTP      OTPService
 	User     UserService
 	Matching MatchingService
 	Chat     ChatService

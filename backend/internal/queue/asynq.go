@@ -19,7 +19,18 @@ const (
 	TypeImageProcess     = "image:process"
 	TypeSendNotification = "notification:send"
 	TypePaymentWebhook   = "payment:webhook"
+	TypeSendSMS          = "sms:send"
+	TypeAccountPurge     = "account:purge"
 )
+
+type SendSMSPayload struct {
+	To      string `json:"to"`
+	Message string `json:"message"`
+}
+
+type AccountPurgePayload struct {
+	RetentionDays int `json:"retention_days"`
+}
 
 // Client wraps asynq.Client to enqueue background jobs
 type Client struct {
@@ -53,6 +64,14 @@ func (c *Client) Enqueue(ctx context.Context, taskType string, payload any, opts
 
 	task := asynq.NewTask(taskType, bytes, opts...)
 	return c.client.EnqueueContext(ctx, task)
+}
+
+// EnqueueSendSMS enqueues an SMS dispatch task with retries in the critical queue
+func (c *Client) EnqueueSendSMS(ctx context.Context, to, message string) (*asynq.TaskInfo, error) {
+	return c.Enqueue(ctx, TypeSendSMS, SendSMSPayload{
+		To:      to,
+		Message: message,
+	}, asynq.MaxRetry(3), asynq.Queue(QueueCritical))
 }
 
 // NewServer creates a new asynq worker server

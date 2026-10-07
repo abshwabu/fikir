@@ -14,6 +14,7 @@ import (
 	"github.com/abshwabu/fikir/backend/internal/config"
 	apphttp "github.com/abshwabu/fikir/backend/internal/http"
 	"github.com/abshwabu/fikir/backend/internal/platform/logger"
+	"github.com/abshwabu/fikir/backend/internal/queue"
 )
 
 func main() {
@@ -54,12 +55,19 @@ func main() {
 		_ = rdb.Close()
 	}()
 
-	// 5. Construct router and dependencies
+	// 5. Connect to Asynq queue
+	queueClient := queue.NewClient(cfg.Redis)
+	defer func() {
+		_ = queueClient.Close()
+	}()
+
+	// 6. Construct router and dependencies
 	router := apphttp.NewRouter(apphttp.ServerDependencies{
-		Config: cfg,
-		Logger: log,
-		DB:     dbPool,
-		Redis:  rdb,
+		Config:      cfg,
+		Logger:      log,
+		DB:          dbPool,
+		Redis:       rdb,
+		QueueClient: queueClient,
 	})
 
 	server := &http.Server{
@@ -70,7 +78,7 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// 6. Graceful shutdown listening
+	// 7. Graceful shutdown listening
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 

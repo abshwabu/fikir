@@ -21,6 +21,8 @@ type Config struct {
 	CDNBaseURL string `envconfig:"CDN_BASE_URL" default:"http://localhost/media"`
 
 	JWT JWTConfig
+	OTP OTPConfig
+	SMS SMSConfig
 
 	CORS AllowedOriginsConfig
 
@@ -68,8 +70,24 @@ type MinIOConfig struct {
 
 type JWTConfig struct {
 	Secret        string        `envconfig:"JWT_SECRET" default:"supersecretjwtkeyforfikirapplicationinlocaldevelopmentonly32chars" validate:"required,min=32"`
+	PrivateKeyHex string        `envconfig:"JWT_ED25519_PRIVATE_KEY_HEX" default:""`
 	AccessExpiry  time.Duration `envconfig:"JWT_ACCESS_EXPIRY" default:"15m" validate:"required"`
-	RefreshExpiry time.Duration `envconfig:"JWT_REFRESH_EXPIRY" default:"168h" validate:"required"`
+	RefreshExpiry time.Duration `envconfig:"JWT_REFRESH_EXPIRY" default:"720h" validate:"required"`
+}
+
+type OTPConfig struct {
+	Expiry          time.Duration `envconfig:"OTP_EXPIRY" default:"5m"`
+	MaxAttempts     int           `envconfig:"OTP_MAX_ATTEMPTS" default:"5" validate:"min=1"`
+	ResendCooldown  time.Duration `envconfig:"OTP_COOLDOWN" default:"60s"`
+	DailyPhoneLimit int           `envconfig:"OTP_DAILY_PHONE_LIMIT" default:"5" validate:"min=1"`
+	DailyIPLimit    int           `envconfig:"OTP_DAILY_IP_LIMIT" default:"20" validate:"min=1"`
+}
+
+type SMSConfig struct {
+	Provider            string `envconfig:"SMS_PROVIDER" default:"console" validate:"oneof=console afromessage fallback"`
+	AfroMessageAPIKey   string `envconfig:"AFROMESSAGE_API_KEY" default:""`
+	AfroMessageSenderID string `envconfig:"AFROMESSAGE_SENDER_ID" default:""`
+	AfroMessageBaseURL  string `envconfig:"AFROMESSAGE_BASE_URL" default:"https://api.afromessage.com/api/send"`
 }
 
 type AllowedOriginsConfig struct {

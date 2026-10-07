@@ -6,11 +6,13 @@ require (
 	github.com/go-chi/chi/v5 v5.2.1
 	github.com/go-chi/cors v1.2.1
 	github.com/go-playground/validator/v10 v10.25.0
+	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/google/uuid v1.6.0
 	github.com/hibiken/asynq v0.25.1
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/minio/minio-go/v7 v7.0.84
+	github.com/nyaruka/phonenumbers v1.5.0
 	github.com/redis/go-redis/v9 v9.7.1
 	github.com/rs/zerolog v1.33.0
 	github.com/stretchr/testify v1.10.0
@@ -104,6 +106,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.47.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.47.0 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/exp v0.0.0-20240525044651-4c93da0ed11d // indirect
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect

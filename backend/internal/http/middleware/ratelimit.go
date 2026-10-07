@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 
@@ -45,8 +46,8 @@ func (rl *RateLimiter) Handler() func(next http.Handler) http.Handler {
 
 			// Determine identifier: authenticated User ID or client IP
 			var key string
-			if userID, ok := GetUserID(r.Context()); ok && userID != "" {
-				key = fmt.Sprintf("ratelimit:user:%s", userID)
+			if userID, ok := GetUserID(r.Context()); ok && userID != uuid.Nil {
+				key = fmt.Sprintf("ratelimit:user:%s", userID.String())
 			} else {
 				ip := getClientIP(r)
 				key = fmt.Sprintf("ratelimit:ip:%s", ip)

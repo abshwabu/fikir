@@ -3,6 +3,8 @@ package integration
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -106,4 +108,41 @@ func SetupHarness(ctx context.Context) (*Harness, func(), error) {
 	}
 
 	return harness, cleanup, nil
+}
+
+// ApplyMigrations executes migration files against the test database
+func (h *Harness) ApplyMigrations(ctx context.Context) error {
+	migrations := []string{
+		"000001_init.up.sql",
+		"000002_auth.up.sql",
+	}
+
+	for _, m := range migrations {
+		candidates := []string{
+			filepath.Join("..", "..", "migrations", m),
+			filepath.Join("migrations", m),
+			filepath.Join("/app", "migrations", m),
+		}
+
+		var sqlBytes []byte
+		var readErr error
+		found := false
+		for _, cand := range candidates {
+			sqlBytes, readErr = os.ReadFile(cand)
+			if readErr == nil {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return fmt.Errorf("could not find migration file %s (last err: %v)", m, readErr)
+		}
+
+		if _, err := h.DB.Exec(ctx, string(sqlBytes)); err != nil {
+			return fmt.Errorf("failed executing migration %s: %w", m, err)
+		}
+	}
+
+	return nil
 }

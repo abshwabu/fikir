@@ -101,6 +101,10 @@ func TooManyRequests(msg string) *AppError {
 	return New(http.StatusTooManyRequests, CodeTooManyRequests, msg)
 }
 
+func RateLimited(msg string) *AppError {
+	return TooManyRequests(msg)
+}
+
 func Internal(err error) *AppError {
 	return Wrap(http.StatusInternalServerError, CodeInternalServer, "An internal server error occurred", err)
 }

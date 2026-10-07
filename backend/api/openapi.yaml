@@ -1,0 +1,343 @@
+openapi: 3.0.3
+info:
+  title: Fikir Dating App API - Authentication & Account Management
+  version: 1.0.0
+  description: |
+    Production-ready authentication API for Fikir dating app in Ethiopia.
+    Provides phone-based OTP authentication (Ethio Telecom and Safaricom Ethiopia),
+    EdDSA JWT access tokens, rotating refresh tokens with reuse detection,
+    and 30-day soft deletion for accounts.
+
+servers:
+  - url: http://localhost/api
+    description: Local Docker Nginx Reverse Proxy
+  - url: http://localhost:8080
+    description: Direct Go API Service
+
+paths:
+  /v1/auth/otp/request:
+    post:
+      summary: Request phone OTP verification code
+      description: |
+        Normalizes Ethiopian phone number (Ethio Telecom 09... and Safaricom 07...),
+        applies rate limits (60s cooldown, daily caps per phone and per IP),
+        and dispatches a 6-digit verification code via SMS.
+      parameters:
+        - name: X-Device-Fingerprint
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Client device fingerprint for fraud and abuse tracking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestOTPRequest'
+      responses:
+        '200':
+          description: OTP dispatched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestOTPResponse'
+        '400':
+          description: Invalid phone number or non-mobile number
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limited due to 60s cooldown or daily quota exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/auth/otp/verify:
+    post:
+      summary: Verify OTP code and obtain token pair
+      description: |
+        Verifies the 6-digit code using constant-time comparison (maximum 5 attempts).
+        On success, provisions new user account or logs in existing user, registers FCM device,
+        and returns an EdDSA access token and rotating refresh token.
+      parameters:
+        - name: X-Device-Fingerprint
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Client device fingerprint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyOTPRequest'
+      responses:
+        '200':
+          description: Verification successful, token pair returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyOTPResponse'
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Incorrect verification code or OTP expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Maximum verification attempts exceeded or account suspended
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/auth/refresh:
+    post:
+      summary: Rotate refresh token and issue new token pair
+      description: |
+        Exchanges a valid refresh token for a new EdDSA access token and rotated refresh token.
+        Implements strict reuse detection: if an old/revoked refresh token is replayed,
+        the entire session family is revoked immediately.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: New token pair issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '400':
+          description: Missing refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Invalid, expired, or reused refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/auth/logout:
+    post:
+      summary: Invalidate user session
+      description: Revokes the refresh token and terminates active session.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      responses:
+        '200':
+          description: Successfully logged out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /v1/me:
+    delete:
+      summary: Schedule account for soft deletion
+      description: |
+        Flags the account as deleted with a 30-day grace period (`deleted_at = NOW()`),
+        revoking all active refresh tokens. Background workers permanently purge accounts
+        older than 30 days.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Account soft-deleted and scheduled for purge
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: EdDSA-signed JSON Web Token
+
+  schemas:
+    RequestOTPRequest:
+      type: object
+      required:
+        - phone
+      properties:
+        phone:
+          type: string
+          example: '0911223344'
+          description: Ethiopian phone number (accepts 09..., 9..., +2519..., 07..., 7...)
+
+    RequestOTPResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        message:
+          type: string
+          example: Verification code sent
+        cooldown_seconds:
+          type: integer
+          example: 60
+
+    DevicePayload:
+      type: object
+      required:
+        - fcm_token
+        - platform
+      properties:
+        fcm_token:
+          type: string
+          example: 'dG9rZW4...sample-fcm'
+        platform:
+          type: string
+          enum: [ios, android, web]
+          example: android
+
+    VerifyOTPRequest:
+      type: object
+      required:
+        - phone
+        - code
+      properties:
+        phone:
+          type: string
+          example: '0911223344'
+        code:
+          type: string
+          example: '123456'
+        device:
+          $ref: '#/components/schemas/DevicePayload'
+
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: '123e4567-e89b-12d3-a456-426614174000'
+        phone_e164:
+          type: string
+          example: '+251911223344'
+        status:
+          type: string
+          example: active
+        locale:
+          type: string
+          example: am
+        is_new_user:
+          type: boolean
+          example: true
+
+    VerifyOTPResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: 'eyJhbGciOiJFZERTQSI...'
+        refresh_token:
+          type: string
+          example: '4f6a1e...'
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          example: 900
+        user:
+          $ref: '#/components/schemas/UserSummary'
+
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          example: '4f6a1e...'
+
+    TokenPair:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          example: 900
+
+    LogoutRequest:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+
+    SuccessResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        message:
+          type: string
+
+    ErrorDetail:
+      type: object
+      properties:
+        field:
+          type: string
+        issue:
+          type: string
+
+    ErrorBody:
+      type: object
+      properties:
+        code:
+          type: string
+          example: BAD_REQUEST
+        message:
+          type: string
+          example: Validation error
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorBody'
