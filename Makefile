@@ -20,14 +20,14 @@ migrate-up: ## Run pending database migrations
 migrate-down: ## Roll back the last database migration
 	$(COMPOSE) run --rm migrate down 1
 
-seed: ## Run database seeder
-	cd backend && go run ./cmd/seed
+seed: ## Run database seeder inside Docker
+	$(COMPOSE) run --rm --entrypoint "go run ./cmd/seed" api
 
-test: ## Run backend unit and integration tests
-	cd backend && go test -v -race ./...
+test: ## Run backend unit and integration tests inside Docker
+	docker run --rm --net=host -e TESTCONTAINERS_RYUK_DISABLED=true -v $(CURDIR)/backend:/app -v $(HOME)/go/pkg/mod:/go/pkg/mod -v /var/run/docker.sock:/var/run/docker.sock -w /app golang:1.24-alpine sh -c "go test -v ./..."
 
-lint: ## Run Go linter / static analysis
-	cd backend && go vet ./...
+lint: ## Run golangci-lint static analysis inside Docker
+	docker run --rm -v $(CURDIR)/backend:/app -v $(HOME)/go/pkg/mod:/go/pkg/mod -w /app golangci/golangci-lint:v1.64.5 golangci-lint run --timeout 5m ./...
 
 build-apk: ## Build Flutter Android APK using CirrusLabs Flutter Docker container
 	docker run --rm -v $(CURDIR)/mobile:/app -w /app ghcr.io/cirruslabs/flutter:latest flutter build apk

@@ -2,82 +2,94 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
+
+	"github.com/abshwabu/fikir/backend/internal/config"
+	apphttp "github.com/abshwabu/fikir/backend/internal/http"
+	"github.com/abshwabu/fikir/backend/internal/platform/logger"
 )
 
-type HealthResponse struct {
-	Status    string    `json:"status"`
-	Service   string    `json:"service"`
-	Timestamp time.Time `json:"timestamp"`
-}
-
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(HealthResponse{
-		Status:    "ok",
-		Service:   "fikir-api",
-		Timestamp: time.Now().UTC(),
-	}); err != nil {
-		log.Printf("Error encoding health response: %v", err)
-	}
-}
-
-func wsHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Upgrade") != "" {
-		w.Header().Set("Upgrade", "websocket")
-		w.Header().Set("Connection", "Upgrade")
-		w.WriteHeader(http.StatusSwitchingProtocols)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("WebSocket gateway placeholder"))
-}
-
 func main() {
-	port := os.Getenv("APP_PORT")
-	if port == "" {
-		port = "8080"
+	// 1. Load and validate configuration
+	cfg, err := config.Load()
+	if err != nil {
+		panic("Failed to load configuration: " + err.Error())
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", healthHandler)
-	mux.HandleFunc("/api/healthz", healthHandler)
-	mux.HandleFunc("/ws", wsHandler)
+	// 2. Initialize structured logging
+	log := logger.New(cfg.AppEnv, cfg.LogLevel)
+	log.Info().Str("env", cfg.AppEnv).Str("port", cfg.AppPort).Msg("Starting Fikir API service")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// 3. Connect to PostgreSQL
+	pgConfig, err := pgxpool.ParseConfig(cfg.Database.DSN())
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to parse database configuration")
+	}
+	pgConfig.MaxConns = cfg.Database.MaxConns
+	pgConfig.MinConns = cfg.Database.MinConns
+
+	dbPool, err := pgxpool.NewWithConfig(ctx, pgConfig)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to connect to database pool")
+	}
+	defer dbPool.Close()
+
+	// 4. Connect to Redis
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     cfg.Redis.Addr(),
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.CacheDB,
+	})
+	defer func() {
+		_ = rdb.Close()
+	}()
+
+	// 5. Construct router and dependencies
+	router := apphttp.NewRouter(apphttp.ServerDependencies{
+		Config: cfg,
+		Logger: log,
+		DB:     dbPool,
+		Redis:  rdb,
+	})
 
 	server := &http.Server{
-		Addr:         ":" + port,
-		Handler:      mux,
+		Addr:         ":" + cfg.AppPort,
+		Handler:      router,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
+	// 6. Graceful shutdown listening
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		log.Printf("Fikir API server starting on port %s...", port)
+		log.Info().Msgf("Server listening on http://0.0.0.0:%s", cfg.AppPort)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server startup failed: %v", err)
+			log.Fatal().Err(err).Msg("HTTP server error")
 		}
 	}()
 
 	<-stop
-	log.Println("Shutting down API server gracefully...")
+	log.Info().Msg("Shutting down server gracefully...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
 
-	if err := server.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Error().Err(err).Msg("Server forced shutdown")
 	}
 
-	log.Println("API server stopped")
+	log.Info().Msg("Server stopped successfully")
 }
