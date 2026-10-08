@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -169,6 +170,20 @@ func (s *discoveryService) RefillDeck(ctx context.Context, userID uuid.UUID) err
 
 	var collectedCandidates []domain.DiscoveryCandidate
 
+	expandedInterestedIn := make([]string, 0, len(userProfile.InterestedIn)*2)
+	for _, item := range userProfile.InterestedIn {
+		switch strings.ToLower(strings.TrimSpace(item)) {
+		case "men", "man":
+			expandedInterestedIn = append(expandedInterestedIn, "man", "men")
+		case "women", "woman":
+			expandedInterestedIn = append(expandedInterestedIn, "woman", "women")
+		case "everyone":
+			expandedInterestedIn = append(expandedInterestedIn, "man", "men", "woman", "women", "other")
+		default:
+			expandedInterestedIn = append(expandedInterestedIn, item)
+		}
+	}
+
 	for _, radiusMeters := range radiusStages {
 		if len(collectedCandidates) >= targetSize {
 			break
@@ -178,7 +193,7 @@ func (s *discoveryService) RefillDeck(ctx context.Context, userID uuid.UUID) err
 		params := domain.DiscoveryParams{
 			UserID:       userID,
 			Gender:       userProfile.Gender,
-			InterestedIn: userProfile.InterestedIn,
+			InterestedIn: expandedInterestedIn,
 			Birthdate:    userProfile.Birthdate,
 			AgeMin:       userProfile.AgeMin,
 			AgeMax:       userProfile.AgeMax,

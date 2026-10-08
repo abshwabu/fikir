@@ -35,12 +35,12 @@ class DiscoveryFilters extends Equatable {
     return {
       'age_min': minAge,
       'age_max': maxAge,
-      'distance_max': maxDistanceKm,
+      'distance_pref_km': maxDistanceKm,
       'interested_in': genderPreference == 'everyone'
-          ? ['woman', 'man']
+          ? ['woman', 'man', 'women', 'men']
           : genderPreference == 'women'
-              ? ['woman']
-              : ['man'],
+              ? ['woman', 'women']
+              : ['man', 'men'],
       'verified_only': verifiedOnly,
     };
   }

@@ -40,8 +40,18 @@ WHERE p.user_id != @user_id
   AND p.show_me = TRUE
   AND u.status = 'active'
   AND u.last_active_at >= NOW() - INTERVAL '30 days'
-  AND @my_gender::text = ANY(p.interested_in)
-  AND p.gender = ANY(@my_interested_in::text[])
+  AND (
+      @my_gender::text = ANY(p.interested_in)
+      OR (@my_gender::text = 'man' AND ('men' = ANY(p.interested_in) OR 'everyone' = ANY(p.interested_in)))
+      OR (@my_gender::text = 'woman' AND ('women' = ANY(p.interested_in) OR 'everyone' = ANY(p.interested_in)))
+      OR 'everyone' = ANY(p.interested_in)
+  )
+  AND (
+      p.gender = ANY(@my_interested_in::text[])
+      OR (p.gender = 'man' AND ('men' = ANY(@my_interested_in::text[]) OR 'everyone' = ANY(@my_interested_in::text[])))
+      OR (p.gender = 'woman' AND ('women' = ANY(@my_interested_in::text[]) OR 'everyone' = ANY(@my_interested_in::text[])))
+      OR 'everyone' = ANY(@my_interested_in::text[])
+  )
   AND EXTRACT(YEAR FROM age(CURRENT_DATE, @my_birthdate::date)) BETWEEN p.age_min AND p.age_max
   AND EXTRACT(YEAR FROM age(CURRENT_DATE, p.birthdate)) BETWEEN @age_min::int4 AND @age_max::int4
   AND (
@@ -52,7 +62,7 @@ WHERE p.user_id != @user_id
   )
   AND EXISTS (
       SELECT 1 FROM profile_photos ph
-      WHERE ph.user_id = p.user_id AND ph.status = 'approved'
+      WHERE ph.user_id = p.user_id AND ph.status IN ('approved', 'pending')
   )
   AND NOT EXISTS (
       SELECT 1 FROM blocks b

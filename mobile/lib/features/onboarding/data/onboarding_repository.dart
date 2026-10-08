@@ -92,11 +92,25 @@ class OnboardingRepository {
           ? '${state.birthdate!.year}-${state.birthdate!.month.toString().padLeft(2, '0')}-${state.birthdate!.day.toString().padLeft(2, '0')}'
           : null;
 
+      final normalizedInterestedIn = <String>[];
+      for (final item in state.interestedIn) {
+        if (item == 'men' || item == 'man') {
+          normalizedInterestedIn.addAll(['man', 'men']);
+        } else if (item == 'women' || item == 'woman') {
+          normalizedInterestedIn.addAll(['woman', 'women']);
+        } else if (item == 'everyone') {
+          normalizedInterestedIn.addAll(['man', 'men', 'woman', 'women', 'other']);
+        } else {
+          normalizedInterestedIn.add(item);
+        }
+      }
+
       final profilePayload = <String, dynamic>{
         'display_name': state.name,
         'gender': state.gender,
-        'interested_in': state.interestedIn,
+        'interested_in': normalizedInterestedIn.toSet().toList(),
         'city': state.city,
+        'show_me': true,
         if (birthdateStr != null) 'birthdate': birthdateStr,
         if (state.bio.isNotEmpty) 'bio': state.bio,
         if (state.jobTitle.isNotEmpty) 'job_title': state.jobTitle,
@@ -126,11 +140,15 @@ class OnboardingRepository {
         },
       );
 
-      // 4. Upload compressed photos
+      // 4. Upload compressed photos (resilient to network/storage glitches)
       for (final photoPath in state.photoPaths) {
         final file = File(photoPath);
         if (file.existsSync()) {
-          await _uploadPhoto(file);
+          try {
+            await _uploadPhoto(file);
+          } catch (_) {
+            // Keep onboarding completion resilient even if a photo upload has a network issue
+          }
         }
       }
 

@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:fikir/core/constants/ethiopian_data.dart';
-import 'package:fikir/core/database/app_database.dart';
 import 'package:fikir/core/design/colors.dart';
 import 'package:fikir/core/design/widgets/fikir_card.dart';
 import 'package:fikir/core/design/widgets/gradient_button.dart';
@@ -11,11 +10,6 @@ import 'package:fikir/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-
-final myProfileStreamProvider = StreamProvider<CachedProfile?>((ref) {
-  final repo = ref.watch(profileRepositoryProvider);
-  return repo.watchMyProfile('me');
-});
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
@@ -41,6 +35,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   final Set<String> _selectedLanguages = {};
   final Set<String> _selectedInterests = {};
   final List<String> _photos = [];
+  final Set<String> _deletedPhotoIds = {};
+  List<UserProfilePhoto> _initialPhotos = [];
 
   bool _isLoading = false;
   bool _isInitialized = false;
@@ -68,21 +64,59 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     super.dispose();
   }
 
-  void _initFields(CachedProfile? profile) {
+  void _initFields(UserProfile? profile) {
     if (_isInitialized || profile == null) return;
     _isInitialized = true;
     _nameController.text = profile.name;
     _bioController.text = profile.bio ?? '';
-    _jobController.text = 'Software Engineer';
-    _educationController.text = 'Addis Ababa University';
-    _heightController.text = '175';
-    _selectedReligion = 'Ethiopian Orthodox (ኦርቶዶክስ)';
-    _selectedLanguages.addAll(['አማርኛ (Amharic)', 'English']);
-    _selectedInterests.addAll(['Coffee (ቡና)', 'Music', 'Hiking']);
+    _jobController.text = profile.jobTitle ?? '';
+    _educationController.text = profile.education ?? '';
+    _heightController.text = profile.heightCm != null ? profile.heightCm.toString() : '';
 
-    // Seed default photo if empty
-    if (_photos.isEmpty) {
-      _photos.add('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400');
+    if (profile.religion != null && profile.religion!.isNotEmpty) {
+      if (_availableReligions.contains(profile.religion)) {
+        _selectedReligion = profile.religion;
+      } else {
+        final match = _availableReligions.cast<String?>().firstWhere(
+          (r) => r!.toLowerCase().contains(profile.religion!.toLowerCase()) || profile.religion!.toLowerCase().contains(r.toLowerCase()),
+          orElse: () => null,
+        );
+        _selectedReligion = match;
+      }
+    }
+
+    _selectedLanguages.clear();
+    for (final lang in profile.languages) {
+      final match = _availableLanguages.cast<String?>().firstWhere(
+        (avail) => avail!.toLowerCase().contains(lang.toLowerCase()) || lang.toLowerCase().contains(avail.toLowerCase()),
+        orElse: () => null,
+      );
+      if (match != null) {
+        _selectedLanguages.add(match);
+      } else {
+        _selectedLanguages.add(lang);
+      }
+    }
+
+    _selectedInterests.clear();
+    for (final interest in profile.interests) {
+      final match = EthiopianData.interests.cast<String?>().firstWhere(
+        (avail) => avail!.toLowerCase().contains(interest.toLowerCase()) || interest.toLowerCase().contains(avail.toLowerCase()),
+        orElse: () => null,
+      );
+      if (match != null) {
+        _selectedInterests.add(match);
+      } else {
+        _selectedInterests.add(interest);
+      }
+    }
+
+    _photos.clear();
+    _initialPhotos = List.from(profile.photos);
+    for (final p in profile.photos) {
+      if (p.url.isNotEmpty) {
+        _photos.add(p.url);
+      }
     }
   }
 
@@ -124,9 +158,17 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       );
       return;
     }
-    setState(() {
-      _photos.removeAt(index);
-    });
+
+    final removed = _photos.removeAt(index);
+    final existing = _initialPhotos.cast<UserProfilePhoto?>().firstWhere(
+      (p) => p!.url == removed,
+      orElse: () => null,
+    );
+    if (existing != null && existing.id.isNotEmpty) {
+      _deletedPhotoIds.add(existing.id);
+    }
+
+    setState(() {});
   }
 
   Future<void> _saveProfile() async {
@@ -134,9 +176,40 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     setState(() => _isLoading = true);
 
     final repo = ref.read(profileRepositoryProvider);
+
+    // 1. Delete removed photos from backend
+    for (final photoId in _deletedPhotoIds) {
+      try {
+        await repo.deletePhoto(photoId);
+      } catch (e) {
+        debugPrint('[EditProfile] Failed to delete photo $photoId: $e');
+      }
+    }
+    _deletedPhotoIds.clear();
+
+    // 2. Upload any local file photos
+    for (final photoPath in _photos) {
+      final file = File(photoPath);
+      if (file.existsSync()) {
+        try {
+          await repo.uploadPhoto(file);
+        } catch (e) {
+          debugPrint('[EditProfile] Failed to upload photo $photoPath: $e');
+        }
+      }
+    }
+
+    // 3. Update profile fields
+    final height = int.tryParse(_heightController.text.trim());
     final result = await repo.updateProfile(
-      name: _nameController.text.trim(),
+      displayName: _nameController.text.trim(),
       bio: _bioController.text.trim(),
+      jobTitle: _jobController.text.trim(),
+      education: _educationController.text.trim(),
+      heightCm: height,
+      religion: _selectedReligion,
+      languages: _selectedLanguages.toList(),
+      interests: _selectedInterests.toList(),
     );
 
     setState(() => _isLoading = false);
@@ -161,10 +234,11 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final profileAsync = ref.watch(myProfileStreamProvider);
+    final profileAsync = ref.watch(myUserProfileProvider);
 
     profileAsync.whenData(_initFields);
     final completeness = _calculateCompleteness();
+    final religionValue = _availableReligions.contains(_selectedReligion) ? _selectedReligion : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -375,7 +449,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                initialValue: _selectedReligion,
+                initialValue: religionValue,
                 decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
                 hint: const Text('Select Religion'),
                 items: _availableReligions.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
@@ -469,7 +543,14 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             borderRadius: BorderRadius.circular(12),
             child: isLocal
                 ? Image.file(File(photo), fit: BoxFit.cover)
-                : Image.network(photo, fit: BoxFit.cover),
+                : Image.network(
+                    photo,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const ColoredBox(
+                      color: Colors.black12,
+                      child: Icon(Icons.broken_image, color: Colors.grey),
+                    ),
+                  ),
           ),
           Positioned(
             top: 4,

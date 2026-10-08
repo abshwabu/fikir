@@ -81,6 +81,7 @@ func (r RedisConfig) Addr() string {
 
 type MinIOConfig struct {
 	Endpoint       string `envconfig:"MINIO_ENDPOINT" default:"minio:9000" validate:"required"`
+	PublicEndpoint string `envconfig:"MINIO_PUBLIC_ENDPOINT" default:""`
 	RootUser       string `envconfig:"MINIO_ROOT_USER" default:"minioadmin" validate:"required"`
 	RootPassword   string `envconfig:"MINIO_ROOT_PASSWORD" default:"miniopassword" validate:"required"`
 	BucketOriginal string `envconfig:"MINIO_BUCKET_ORIGINAL" default:"fikir-media-original" validate:"required"`

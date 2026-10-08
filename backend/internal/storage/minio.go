@@ -16,6 +16,7 @@ import (
 // Storage wraps minio.Client
 type Storage struct {
 	client         *minio.Client
+	publicClient   *minio.Client
 	bucketOriginal string
 	bucketPublic   string
 }
@@ -35,8 +36,22 @@ func New(cfg config.MinIOConfig) (*Storage, error) {
 		return nil, fmt.Errorf("failed to create minio client: %w", err)
 	}
 
+	publicEndpoint := cfg.PublicEndpoint
+	if publicEndpoint == "" {
+		publicEndpoint = cfg.Endpoint
+	}
+	publicClient, err := minio.New(publicEndpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(cfg.RootUser, cfg.RootPassword, ""),
+		Secure: cfg.UseSSL,
+		Region: region,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create minio public client: %w", err)
+	}
+
 	return &Storage{
 		client:         client,
+		publicClient:   publicClient,
 		bucketOriginal: cfg.BucketOriginal,
 		bucketPublic:   cfg.BucketPublic,
 	}, nil
@@ -73,17 +88,17 @@ func (s *Storage) UploadPrivate(ctx context.Context, objectName string, reader i
 
 // PresignedPutOriginal generates a presigned PUT URL for client-direct upload to the private bucket
 func (s *Storage) PresignedPutOriginal(ctx context.Context, objectName string, expiry time.Duration) (*url.URL, error) {
-	return s.client.PresignedPutObject(ctx, s.bucketOriginal, objectName, expiry)
+	return s.publicClient.PresignedPutObject(ctx, s.bucketOriginal, objectName, expiry)
 }
 
 // PresignedPutPublic generates a presigned PUT URL for client-direct upload to the public bucket
 func (s *Storage) PresignedPutPublic(ctx context.Context, objectName string, expiry time.Duration) (*url.URL, error) {
-	return s.client.PresignedPutObject(ctx, s.bucketPublic, objectName, expiry)
+	return s.publicClient.PresignedPutObject(ctx, s.bucketPublic, objectName, expiry)
 }
 
 // PresignedGet generates a presigned download URL for private objects
 func (s *Storage) PresignedGet(ctx context.Context, bucket, objectName string, expiry time.Duration) (*url.URL, error) {
-	return s.client.PresignedGetObject(ctx, bucket, objectName, expiry, nil)
+	return s.publicClient.PresignedGetObject(ctx, bucket, objectName, expiry, nil)
 }
 
 // GetObjectOriginal downloads an object from the private originals bucket

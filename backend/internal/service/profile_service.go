@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -116,7 +117,28 @@ func (s *profileService) UpdateProfile(ctx context.Context, userID uuid.UUID, re
 		existing.Gender = *req.Gender
 	}
 	if req.InterestedIn != nil {
-		existing.InterestedIn = req.InterestedIn
+		normalized := make([]string, 0, len(req.InterestedIn)*2)
+		for _, item := range req.InterestedIn {
+			switch strings.ToLower(strings.TrimSpace(item)) {
+			case "men", "man":
+				normalized = append(normalized, "man", "men")
+			case "women", "woman":
+				normalized = append(normalized, "woman", "women")
+			case "everyone":
+				normalized = append(normalized, "man", "men", "woman", "women", "other")
+			default:
+				normalized = append(normalized, item)
+			}
+		}
+		seen := make(map[string]bool)
+		deduped := make([]string, 0, len(normalized))
+		for _, item := range normalized {
+			if !seen[item] {
+				seen[item] = true
+				deduped = append(deduped, item)
+			}
+		}
+		existing.InterestedIn = deduped
 	}
 	if req.Bio != nil {
 		existing.Bio = *req.Bio

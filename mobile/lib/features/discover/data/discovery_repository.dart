@@ -269,6 +269,10 @@ class DiscoveryRepositoryImpl implements DiscoveryRepository {
     }
 
     // Return curated mock cards if deck is otherwise empty (ensures rich initial UX)
+    if (filters != null && filters.genderPreference != 'everyone') {
+      final targetGender = filters.genderPreference == 'women' ? 'woman' : 'man';
+      return fallbackCards.where((c) => c.gender == targetGender).toList();
+    }
     return List.from(fallbackCards);
   }
 

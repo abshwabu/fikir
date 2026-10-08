@@ -109,7 +109,8 @@ class DiscoveryNotifier extends StateNotifier<DiscoveryState> {
     // Precache the next 3 cards' primary photo
     final candidates = state.cards.take(3);
     for (final candidate in candidates) {
-      if (candidate.primaryPhotoUrl.isNotEmpty) {
+      if (candidate.primaryPhotoUrl.startsWith('http://') ||
+          candidate.primaryPhotoUrl.startsWith('https://')) {
         precacheImage(
           CachedNetworkImageProvider(
             candidate.primaryPhotoUrl,
@@ -119,7 +120,9 @@ class DiscoveryNotifier extends StateNotifier<DiscoveryState> {
         );
       }
       // Lazily precache 2nd photo if present
-      if (candidate.photos.length > 1) {
+      if (candidate.photos.length > 1 &&
+          (candidate.photos[1].url.startsWith('http://') ||
+              candidate.photos[1].url.startsWith('https://'))) {
         precacheImage(
           CachedNetworkImageProvider(
             candidate.photos[1].url,

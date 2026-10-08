@@ -5,6 +5,7 @@ import 'package:fikir/core/storage/shared_prefs.dart';
 import 'package:fikir/core/utils/ethiopian_calendar.dart';
 import 'package:fikir/core/utils/ethiopic_numerals.dart';
 import 'package:fikir/features/auth/data/auth_repository.dart';
+import 'package:fikir/features/profile/data/profile_repository.dart';
 import 'package:fikir/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -38,45 +39,46 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  DateTime _birthdate = DateTime(1998, 5, 14);
+  DateTime? _birthdate;
 
-  Future<void> _pickBirthdate() async {
+  Future<void> _pickBirthdate(DateTime currentBirthdate) async {
     final useEthCal = ref.read(useEthiopianCalendarProvider);
     final useEthNum = ref.read(useEthiopicNumeralsProvider);
 
+    DateTime? selected;
     if (useEthCal) {
-      final selected = await EthiopianDatePickerDialog.show(
+      selected = await EthiopianDatePickerDialog.show(
         context,
-        initialDate: _birthdate,
+        initialDate: _birthdate ?? currentBirthdate,
         useEthiopicNumerals: useEthNum,
       );
-      if (selected != null) {
-        setState(() => _birthdate = selected);
-      }
     } else {
-      final selected = await showDatePicker(
+      selected = await showDatePicker(
         context: context,
-        initialDate: _birthdate,
+        initialDate: _birthdate ?? currentBirthdate,
         firstDate: DateTime(1940),
         lastDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
       );
-      if (selected != null) {
-        setState(() => _birthdate = selected);
-      }
+    }
+
+    if (selected != null) {
+      setState(() => _birthdate = selected);
+      final repo = ref.read(profileRepositoryProvider);
+      await repo.updateProfile(birthdate: selected);
     }
   }
 
-  String _formatBirthdate() {
+  String _formatBirthdate(DateTime bdate) {
     final useEthCal = ref.read(useEthiopianCalendarProvider);
     final useEthNum = ref.read(useEthiopicNumeralsProvider);
 
     if (useEthCal) {
-      final eth = EthiopianDate.fromGregorian(_birthdate);
+      final eth = EthiopianDate.fromGregorian(bdate);
       final dayStr = EthiopicNumerals.format(eth.day, useEthiopic: useEthNum);
       final yearStr = EthiopicNumerals.format(eth.year, useEthiopic: useEthNum);
       return '${eth.monthNameAmharic} $dayStr፣ $yearStr ዓ.ም.';
     }
-    return '${_birthdate.year}-${_birthdate.month.toString().padLeft(2, '0')}-${_birthdate.day.toString().padLeft(2, '0')}';
+    return '${bdate.year}-${bdate.month.toString().padLeft(2, '0')}-${bdate.day.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -86,6 +88,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final currentTheme = ref.watch(currentThemeModeProvider);
     final useEthCal = ref.watch(useEthiopianCalendarProvider);
     final useEthNum = ref.watch(useEthiopicNumeralsProvider);
+    final profileAsync = ref.watch(myUserProfileProvider);
+
+    final profile = profileAsync.valueOrNull;
+    final birthdateToDisplay = _birthdate ?? profile?.birthdate ?? DateTime(1998, 5, 14);
 
     return Scaffold(
       appBar: AppBar(
@@ -114,15 +120,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               child: Stack(
                 children: [
                   Container(
-                    width: 100,
-                    height: 100,
+                    width: 106,
+                    height: 106,
                     decoration: const BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: FikirColors.primaryGradient,
                     ),
                     padding: const EdgeInsets.all(3),
-                    child: const CircleAvatar(
-                      backgroundImage: NetworkImage('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400'),
+                    child: CircleAvatar(
+                      backgroundColor: Colors.grey.shade200,
+                      backgroundImage: (profile?.avatarUrl != null && profile!.avatarUrl!.isNotEmpty)
+                          ? NetworkImage(profile.avatarUrl!)
+                          : null,
+                      child: (profile?.avatarUrl == null || profile!.avatarUrl!.isEmpty)
+                          ? Text(
+                              (profile?.name.isNotEmpty ?? false ? profile!.name[0].toUpperCase() : 'U'),
+                              style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: FikirColors.primaryCoral),
+                            )
+                          : null,
                     ),
                   ),
                   Positioned(
@@ -135,7 +150,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           color: FikirColors.primaryCoral,
                           shape: BoxShape.circle,
                         ),
-                        padding: const EdgeInsets.all(6),
+                        padding: const EdgeInsets.all(7),
                         child: const Icon(Icons.camera_alt, color: Colors.white, size: 16),
                       ),
                     ),
@@ -144,23 +159,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            const Row(
+            Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  'Abebe Bikila',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  profile?.name ?? 'User',
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 ),
-                SizedBox(width: 6),
-                Icon(Icons.verified, color: Colors.lightBlueAccent, size: 20),
+                if (profile?.isVerified ?? false) ...[
+                  const SizedBox(width: 6),
+                  const Icon(Icons.verified, color: Colors.lightBlueAccent, size: 20),
+                ],
               ],
             ),
             const SizedBox(height: 4),
             Text(
-              'Addis Ababa, Ethiopia',
+              (profile?.city?.isNotEmpty ?? false) ? profile!.city! : 'Addis Ababa, Ethiopia',
               style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
+
             // Quick action buttons: Edit Profile & Get Verified
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -177,14 +195,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 const SizedBox(width: 12),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade50,
-                    foregroundColor: Colors.blueAccent,
+                    backgroundColor: (profile?.isVerified ?? false) ? Colors.green.shade50 : Colors.blue.shade50,
+                    foregroundColor: (profile?.isVerified ?? false) ? Colors.green : Colors.blueAccent,
                     elevation: 0,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
-                  icon: const Icon(Icons.verified_rounded, size: 16),
-                  label: Text(l10n?.verifyProfile ?? 'Get Verified'),
+                  icon: Icon((profile?.isVerified ?? false) ? Icons.check_circle_rounded : Icons.verified_rounded, size: 16),
+                  label: Text((profile?.isVerified ?? false) ? 'Verified' : (l10n?.verifyProfile ?? 'Get Verified')),
                   onPressed: () => context.push('/profile/verify'),
                 ),
               ],
@@ -197,16 +215,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
+                      const Text(
                         'Profile Completeness',
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                       Text(
-                        '85%',
-                        style: TextStyle(
+                        '${profile?.completenessScore ?? 0}%',
+                        style: const TextStyle(
                           color: FikirColors.primaryCoral,
                           fontWeight: FontWeight.bold,
                         ),
@@ -216,17 +234,118 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   const SizedBox(height: 8),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: const LinearProgressIndicator(
-                      value: 0.85,
+                    child: LinearProgressIndicator(
+                      value: ((profile?.completenessScore ?? 0) / 100.0).clamp(0.0, 1.0),
                       minHeight: 8,
                       backgroundColor: Colors.black12,
-                      valueColor: AlwaysStoppedAnimation<Color>(FikirColors.primaryCoral),
+                      valueColor: const AlwaysStoppedAnimation<Color>(FikirColors.primaryCoral),
                     ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
+
+            // About Me & Details Section
+            if (profile != null &&
+                ((profile.bio?.isNotEmpty ?? false) ||
+                    (profile.jobTitle?.isNotEmpty ?? false) ||
+                    profile.interests.isNotEmpty ||
+                    profile.languages.isNotEmpty))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: FikirCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'About Me',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      if (profile.bio != null && profile.bio!.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          profile.bio!,
+                          style: TextStyle(color: Colors.grey.shade800, fontSize: 14, height: 1.4),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      if (profile.jobTitle != null && profile.jobTitle!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.work_outline, size: 18, color: FikirColors.primaryCoral),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(profile.jobTitle!, style: const TextStyle(fontSize: 14))),
+                            ],
+                          ),
+                        ),
+                      if (profile.education != null && profile.education!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.school_outlined, size: 18, color: FikirColors.primaryCoral),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(profile.education!, style: const TextStyle(fontSize: 14))),
+                            ],
+                          ),
+                        ),
+                      if (profile.religion != null && profile.religion!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.temple_buddhist_outlined, size: 18, color: FikirColors.primaryCoral),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(profile.religion!, style: const TextStyle(fontSize: 14))),
+                            ],
+                          ),
+                        ),
+                      if (profile.languages.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        const Text('Languages', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.grey)),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: profile.languages
+                              .map(
+                                (l) => Chip(
+                                  label: Text(l, style: const TextStyle(fontSize: 12)),
+                                  backgroundColor: Colors.grey.shade100,
+                                  padding: EdgeInsets.zero,
+                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ],
+                      if (profile.interests.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        const Text('Interests', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.grey)),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: profile.interests
+                              .map(
+                                (interest) => Chip(
+                                  label: Text(interest, style: const TextStyle(fontSize: 12)),
+                                  backgroundColor: FikirColors.primaryCoral.withAlpha(25),
+                                  padding: EdgeInsets.zero,
+                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
 
             // Birthdate & Ethiopian Calendar Section
             FikirCard(
@@ -241,13 +360,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   const SizedBox(height: 8),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(_formatBirthdate()),
+                    title: Text(_formatBirthdate(birthdateToDisplay)),
                     subtitle: Text(
                       useEthCal ? 'Ethiopian Calendar (የኢትዮጵያ ቀን)' : 'Gregorian Calendar',
                       style: const TextStyle(fontSize: 12),
                     ),
                     trailing: const Icon(Icons.edit_calendar_rounded, color: FikirColors.primaryCoral),
-                    onTap: _pickBirthdate,
+                    onTap: () => _pickBirthdate(birthdateToDisplay),
                   ),
                   const Divider(),
                   SwitchListTile(
