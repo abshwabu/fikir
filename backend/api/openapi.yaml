@@ -372,6 +372,236 @@ paths:
               schema:
                 $ref: '#/components/schemas/VerificationResponse'
 
+  /v1/discovery:
+    get:
+      summary: Retrieve candidate deck for swiping
+      description: |
+        Pops candidate profiles pre-computed from Redis list (or triggers replenishment).
+        Hydrates cards via MGET pipeline and singleflight cache.
+        Supports progressive radius expansion for regional Ethiopian cities.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 15
+            maximum: 50
+          description: Number of candidates to pop
+        - name: Accept
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Media type negotiation (image/avif, image/webp)
+      responses:
+        '200':
+          description: Candidate cards returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryDeckResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/swipes:
+    post:
+      summary: Record swipe action on candidate
+      description: |
+        Fast async-friendly path (< 20 ms) writing immediately to Redis and offloading
+        PostgreSQL persistence to Asynq queue. Detects mutual likes and provisions matches.
+        Enforces daily free like quota (50 / 12h) and super likes (1 / 24h).
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SwipeRequest'
+      responses:
+        '200':
+          description: Swipe recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SwipeResponse'
+        '400':
+          description: Invalid direction or swipe on self
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Free like or super-like rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/swipes/rewind:
+    post:
+      summary: Rewind previous swipe action (Premium feature)
+      description: |
+        Pops user's last swipe from Redis history stack, reverts Redis sets,
+        deletes PostgreSQL swipe record, and soft-unmatches if mutual match was formed.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Last swipe reverted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RewindResponse'
+        '400':
+          description: No recent swipe to rewind
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Rewind requires active premium subscription
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/likes-you:
+    get:
+      summary: View profiles of users who liked you
+      description: |
+        Returns list of candidate profiles for premium members, or total count + blurred teaser preview for free tier members.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+        - name: is_premium
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Testing override for premium status
+      responses:
+        '200':
+          description: Likes you summary / list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LikesYouResponse'
+
+  /v1/matches:
+    get:
+      summary: List matches with cursor pagination
+      description: |
+        Retrieves active matches with latest message preview, sorted by recent activity.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: RFC3339Nano timestamp cursor
+      responses:
+        '200':
+          description: Matches page returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchesResponse'
+
+  /v1/matches/{id}:
+    delete:
+      summary: Unmatch a user
+      description: Soft-unmatches the specified match (sets unmatched_at = NOW()).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successfully unmatched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnmatchResponse'
+
+  /v1/blocks:
+    post:
+      summary: Block a user
+      description: Prevents future discovery, soft-unmatches existing match, and updates Redis sets.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BlockRequest'
+      responses:
+        '200':
+          description: User blocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockResponse'
+
+  /v1/reports:
+    post:
+      summary: Report a user for moderation
+      description: Submits a report for safety moderation review.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportRequest'
+      responses:
+        '201':
+          description: Report submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+
+  /metrics:
+    get:
+      summary: Prometheus operational metrics
+      description: Exposes real-time cache hit rates, deck pop/refill counters, swipe totals, and match rates.
+      responses:
+        '200':
+          description: Prometheus metrics exposition
+          content:
+            text/plain:
+              schema:
+                type: string
+
 components:
   securitySchemes:
     BearerAuth:
@@ -834,3 +1064,230 @@ components:
       properties:
         error:
           $ref: '#/components/schemas/ErrorBody'
+
+    ProfileCardPhoto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        position:
+          type: integer
+        blurhash:
+          type: string
+        url:
+          type: string
+        width:
+          type: integer
+        height:
+          type: integer
+
+    ProfileCard:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+        age:
+          type: integer
+        gender:
+          type: string
+        bio:
+          type: string
+        job_title:
+          type: string
+        education:
+          type: string
+        height_cm:
+          type: integer
+          nullable: true
+        religion:
+          type: string
+        city:
+          type: string
+        region:
+          type: string
+        verified:
+          type: boolean
+        completeness_score:
+          type: integer
+        interests:
+          type: array
+          items:
+            type: string
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfileCardPhoto'
+        last_active_at:
+          type: string
+          format: date-time
+
+    DiscoveryDeckResponse:
+      type: object
+      properties:
+        deck:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfileCard'
+
+    SwipeRequest:
+      type: object
+      required:
+        - target_id
+        - direction
+      properties:
+        target_id:
+          type: string
+          format: uuid
+        direction:
+          type: string
+          enum: [like, nope, super]
+
+    MatchSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_a:
+          type: string
+          format: uuid
+        user_b:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+
+    SwipeResponse:
+      type: object
+      properties:
+        matched:
+          type: boolean
+        match:
+          $ref: '#/components/schemas/MatchSummary'
+
+    RewindResponse:
+      type: object
+      properties:
+        undone:
+          type: boolean
+        target_id:
+          type: string
+          format: uuid
+        direction:
+          type: string
+
+    LikesYouPreview:
+      type: object
+      properties:
+        blurhash:
+          type: string
+        blurred_photo_url:
+          type: string
+
+    LikesYouResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+        profiles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfileCard'
+        preview:
+          $ref: '#/components/schemas/LikesYouPreview'
+
+    LastMessagePreview:
+      type: object
+      properties:
+        id:
+          type: integer
+        sender_id:
+          type: string
+          format: uuid
+        body:
+          type: string
+        type:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    MatchWithPreview:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_a:
+          type: string
+          format: uuid
+        user_b:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        other_user:
+          $ref: '#/components/schemas/ProfileCard'
+        last_message:
+          $ref: '#/components/schemas/LastMessagePreview'
+
+    MatchesResponse:
+      type: object
+      properties:
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/MatchWithPreview'
+        next_cursor:
+          type: string
+          nullable: true
+
+    UnmatchResponse:
+      type: object
+      properties:
+        unmatched:
+          type: boolean
+
+    BlockRequest:
+      type: object
+      required:
+        - target_id
+      properties:
+        target_id:
+          type: string
+          format: uuid
+        reason:
+          type: string
+
+    BlockResponse:
+      type: object
+      properties:
+        blocked:
+          type: boolean
+
+    ReportRequest:
+      type: object
+      required:
+        - target_id
+        - reason
+      properties:
+        target_id:
+          type: string
+          format: uuid
+        reason:
+          type: string
+        details:
+          type: string
+
+    ReportResponse:
+      type: object
+      properties:
+        reported:
+          type: boolean
+

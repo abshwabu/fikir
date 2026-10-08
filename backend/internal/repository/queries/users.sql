@@ -1,17 +1,17 @@
 -- name: GetUserByID :one
-SELECT id, phone_e164, status, created_at, last_active_at, is_premium, premium_until, locale, deleted_at
+SELECT id, phone_e164, status, created_at, last_active_at, is_premium, premium_until, locale, deleted_at, boost_until
 FROM users
 WHERE id = $1 LIMIT 1;
 
 -- name: GetUserByPhone :one
-SELECT id, phone_e164, status, created_at, last_active_at, is_premium, premium_until, locale, deleted_at
+SELECT id, phone_e164, status, created_at, last_active_at, is_premium, premium_until, locale, deleted_at, boost_until
 FROM users
 WHERE phone_e164 = $1 LIMIT 1;
 
 -- name: CreateUser :one
 INSERT INTO users (phone_e164, status, locale)
 VALUES ($1, $2, $3)
-RETURNING id, phone_e164, status, created_at, last_active_at, is_premium, premium_until, locale, deleted_at;
+RETURNING id, phone_e164, status, created_at, last_active_at, is_premium, premium_until, locale, deleted_at, boost_until;
 
 -- name: UpdateUserLastActive :exec
 UPDATE users

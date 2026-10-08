@@ -6,9 +6,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 
+	"github.com/abshwabu/fikir/backend/internal/cache"
 	"github.com/abshwabu/fikir/backend/internal/config"
 	"github.com/abshwabu/fikir/backend/internal/domain"
 	"github.com/abshwabu/fikir/backend/internal/http/handler"
@@ -29,13 +31,23 @@ type ServerDependencies struct {
 	DB             *pgxpool.Pool
 	Redis          *redis.Client
 	AuthService    service.AuthService
-	ProfileService service.ProfileService
-	MediaService   service.MediaService
-	TokenMgr       *token.Manager
-	UserRepo       domain.UserRepository
-	ProfileRepo    domain.ProfileRepository
-	StorageClient  *storage.Storage
-	QueueClient    *queue.Client
+	ProfileService   service.ProfileService
+	MediaService     service.MediaService
+	DiscoveryService service.DiscoveryService
+	SwipeService     service.SwipeService
+	TokenMgr         *token.Manager
+	UserRepo         domain.UserRepository
+	ProfileRepo      domain.ProfileRepository
+	DiscoveryRepo    domain.DiscoveryRepository
+	SwipeRepo        domain.SwipeRepository
+	MatchRepo        domain.MatchRepository
+	BlockRepo        domain.BlockRepository
+	ReportRepo       domain.ReportRepository
+	CardCache        cache.ProfileCardCache
+	DeckCache        cache.DeckCache
+	SwipeCache       cache.SwipeCache
+	StorageClient    *storage.Storage
+	QueueClient      *queue.Client
 }
 
 // NewRouter constructs the Chi router with middleware and routes
@@ -63,6 +75,7 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 	// Liveness & Readiness endpoints
 	r.Get("/healthz", healthHandler.Healthz)
 	r.Get("/readyz", healthHandler.Readyz)
+	r.Handle("/metrics", promhttp.Handler())
 
 	// Initialize components
 	authService := deps.AuthService
@@ -72,6 +85,16 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 	profileService := deps.ProfileService
 	mediaService := deps.MediaService
 	storageClient := deps.StorageClient
+	discoveryRepo := deps.DiscoveryRepo
+	swipeRepo := deps.SwipeRepo
+	matchRepo := deps.MatchRepo
+	blockRepo := deps.BlockRepo
+	reportRepo := deps.ReportRepo
+	cardCache := deps.CardCache
+	deckCache := deps.DeckCache
+	swipeCache := deps.SwipeCache
+	discoveryService := deps.DiscoveryService
+	swipeService := deps.SwipeService
 
 	if deps.DB != nil {
 		queries := repository.New(deps.DB)
@@ -80,6 +103,33 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 		}
 		if profileRepo == nil {
 			profileRepo = repository.NewProfileRepository(queries)
+		}
+		if discoveryRepo == nil {
+			discoveryRepo = repository.NewDiscoveryRepository(queries)
+		}
+		if swipeRepo == nil {
+			swipeRepo = repository.NewSwipeRepository(queries)
+		}
+		if matchRepo == nil {
+			matchRepo = repository.NewMatchRepository(queries, deps.DB, discoveryRepo)
+		}
+		if blockRepo == nil {
+			blockRepo = repository.NewBlockRepository(queries)
+		}
+		if reportRepo == nil {
+			reportRepo = repository.NewReportRepository(queries)
+		}
+
+		if deps.Redis != nil {
+			if cardCache == nil {
+				cardCache = cache.NewProfileCardCache(deps.Redis)
+			}
+			if deckCache == nil {
+				deckCache = cache.NewDeckCache(deps.Redis)
+			}
+			if swipeCache == nil {
+				swipeCache = cache.NewSwipeCache(deps.Redis)
+			}
 		}
 
 		if storageClient == nil && deps.Config != nil {
@@ -97,11 +147,19 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 			if deps.Config != nil && deps.Config.CDNBaseURL != "" {
 				cdnBase = deps.Config.CDNBaseURL
 			}
-			mediaService = service.NewMediaService(profileRepo, storageClient, deps.QueueClient, processor, moderator, cdnBase)
+			mediaService = service.NewMediaService(profileRepo, storageClient, deps.QueueClient, processor, moderator, cdnBase, cardCache)
 		}
 
 		if profileService == nil && profileRepo != nil {
-			profileService = service.NewProfileService(profileRepo, mediaService)
+			profileService = service.NewProfileService(profileRepo, mediaService, cardCache)
+		}
+
+		if discoveryService == nil && discoveryRepo != nil && profileRepo != nil && deckCache != nil && cardCache != nil && swipeCache != nil && deps.Config != nil {
+			discoveryService = service.NewDiscoveryService(deps.Config.Discovery, discoveryRepo, profileRepo, deckCache, cardCache, swipeCache, deps.QueueClient)
+		}
+
+		if swipeService == nil && userRepo != nil && profileRepo != nil && swipeRepo != nil && matchRepo != nil && blockRepo != nil && reportRepo != nil && discoveryRepo != nil && swipeCache != nil && cardCache != nil && deps.Config != nil {
+			swipeService = service.NewSwipeService(deps.Config.Swipe, userRepo, profileRepo, swipeRepo, matchRepo, blockRepo, reportRepo, discoveryRepo, swipeCache, cardCache, deps.QueueClient)
 		}
 
 		if authService == nil && deps.Redis != nil {
@@ -143,6 +201,16 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 		mediaHandler = handler.NewMediaHandler(mediaService)
 	}
 
+	var discoveryHandler *handler.DiscoveryHandler
+	if discoveryService != nil {
+		discoveryHandler = handler.NewDiscoveryHandler(discoveryService)
+	}
+
+	var swipeHandler *handler.SwipeHandler
+	if swipeService != nil {
+		swipeHandler = handler.NewSwipeHandler(swipeService)
+	}
+
 	registerV1Routes := func(v1 chi.Router) {
 		v1.Get("/ping", healthHandler.Healthz)
 
@@ -173,6 +241,20 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 					authed.Delete("/me/photos/{id}", mediaHandler.DeletePhoto)
 					authed.Put("/me/photos/reorder", mediaHandler.ReorderPhotos)
 				}
+
+				if discoveryHandler != nil {
+					authed.Get("/discovery", discoveryHandler.GetDiscoveryDeck)
+				}
+
+				if swipeHandler != nil {
+					authed.Post("/swipes", swipeHandler.Swipe)
+					authed.Post("/swipes/rewind", swipeHandler.Rewind)
+					authed.Get("/likes-you", swipeHandler.GetLikesYou)
+					authed.Get("/matches", swipeHandler.GetMatches)
+					authed.Delete("/matches/{id}", swipeHandler.Unmatch)
+					authed.Post("/blocks", swipeHandler.Block)
+					authed.Post("/reports", swipeHandler.Report)
+				}
 			})
 		}
 	}
@@ -182,6 +264,7 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 	r.Route("/api", func(api chi.Router) {
 		api.Get("/healthz", healthHandler.Healthz)
 		api.Get("/readyz", healthHandler.Readyz)
+		api.Handle("/metrics", promhttp.Handler())
 		api.Route("/v1", registerV1Routes)
 	})
 

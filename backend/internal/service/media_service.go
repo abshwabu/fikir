@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
+	"github.com/abshwabu/fikir/backend/internal/cache"
 	"github.com/abshwabu/fikir/backend/internal/domain"
 	apperrors "github.com/abshwabu/fikir/backend/internal/platform/errors"
 	"github.com/abshwabu/fikir/backend/internal/platform/ethiopia"
@@ -83,6 +84,7 @@ type mediaService struct {
 	processor   media.ImageProcessor
 	moderator   media.ImageModerator
 	cdnBaseURL  string
+	cardCache   cache.ProfileCardCache
 }
 
 func NewMediaService(
@@ -92,7 +94,12 @@ func NewMediaService(
 	processor media.ImageProcessor,
 	moderator media.ImageModerator,
 	cdnBaseURL string,
+	cardCache ...cache.ProfileCardCache,
 ) MediaService {
+	var cc cache.ProfileCardCache
+	if len(cardCache) > 0 {
+		cc = cardCache[0]
+	}
 	return &mediaService{
 		profileRepo: profileRepo,
 		storage:     storage,
@@ -100,6 +107,7 @@ func NewMediaService(
 		processor:   processor,
 		moderator:   moderator,
 		cdnBaseURL:  strings.TrimRight(cdnBaseURL, "/"),
+		cardCache:   cc,
 	}
 }
 
@@ -260,6 +268,10 @@ func (s *mediaService) ProcessImage(ctx context.Context, photoID, userID uuid.UU
 		_ = s.profileRepo.Upsert(ctx, p)
 	}
 
+	if s.cardCache != nil {
+		_ = s.cardCache.Invalidate(ctx, userID)
+	}
+
 	log.Info().Str("photo_id", photoID.String()).Str("status", string(photo.Status)).Msg("Image processed successfully")
 	return nil
 }
@@ -317,6 +329,10 @@ func (s *mediaService) DeletePhoto(ctx context.Context, userID, photoID uuid.UUI
 		_ = s.profileRepo.Upsert(ctx, p)
 	}
 
+	if s.cardCache != nil {
+		_ = s.cardCache.Invalidate(ctx, userID)
+	}
+
 	return nil
 }
 
@@ -343,6 +359,10 @@ func (s *mediaService) ReorderPhotos(ctx context.Context, userID uuid.UUID, phot
 
 	if err := s.profileRepo.ReorderPhotos(ctx, userID, photoIDs); err != nil {
 		return nil, fmt.Errorf("failed to reorder photos: %w", err)
+	}
+
+	if s.cardCache != nil {
+		_ = s.cardCache.Invalidate(ctx, userID)
 	}
 
 	return s.GetUserPhotos(ctx, userID, acceptHeader)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
@@ -22,6 +23,9 @@ const (
 	TypePaymentWebhook   = "payment:webhook"
 	TypeSendSMS          = "sms:send"
 	TypeAccountPurge     = "account:purge"
+	TypeSwipeRecord      = "swipe:record"
+	TypeDeckRefill       = "discovery:deck_refill"
+	TypeMatchNotification = "notification:match"
 )
 
 type SendSMSPayload struct {
@@ -37,6 +41,23 @@ type ImageProcessPayload struct {
 	PhotoID     uuid.UUID `json:"photo_id"`
 	UserID      uuid.UUID `json:"user_id"`
 	OriginalKey string    `json:"original_key"`
+}
+
+type SwipeRecordPayload struct {
+	SwiperID  uuid.UUID `json:"swiper_id"`
+	TargetID  uuid.UUID `json:"target_id"`
+	Direction string    `json:"direction"`
+	CreatedAt string    `json:"created_at"`
+}
+
+type DeckRefillPayload struct {
+	UserID uuid.UUID `json:"user_id"`
+}
+
+type MatchNotificationPayload struct {
+	MatchID uuid.UUID `json:"match_id"`
+	UserA   uuid.UUID `json:"user_a"`
+	UserB   uuid.UUID `json:"user_b"`
 }
 
 // Client wraps asynq.Client to enqueue background jobs
@@ -88,6 +109,32 @@ func (c *Client) EnqueueImageProcess(ctx context.Context, photoID, userID uuid.U
 		UserID:      userID,
 		OriginalKey: originalKey,
 	}, asynq.MaxRetry(3), asynq.Queue(QueueDefault))
+}
+
+// EnqueueSwipeRecord enqueues an asynchronous swipe persistence task
+func (c *Client) EnqueueSwipeRecord(ctx context.Context, swiperID, targetID uuid.UUID, direction string, createdAt string) (*asynq.TaskInfo, error) {
+	return c.Enqueue(ctx, TypeSwipeRecord, SwipeRecordPayload{
+		SwiperID:  swiperID,
+		TargetID:  targetID,
+		Direction: direction,
+		CreatedAt: createdAt,
+	}, asynq.MaxRetry(5), asynq.Queue(QueueDefault))
+}
+
+// EnqueueDeckRefill enqueues candidate deck pre-computation
+func (c *Client) EnqueueDeckRefill(ctx context.Context, userID uuid.UUID) (*asynq.TaskInfo, error) {
+	return c.Enqueue(ctx, TypeDeckRefill, DeckRefillPayload{
+		UserID: userID,
+	}, asynq.MaxRetry(2), asynq.Queue(QueueLow), asynq.Unique(30*time.Second))
+}
+
+// EnqueueMatchNotification enqueues mutual match notifications
+func (c *Client) EnqueueMatchNotification(ctx context.Context, matchID, userA, userB uuid.UUID) (*asynq.TaskInfo, error) {
+	return c.Enqueue(ctx, TypeMatchNotification, MatchNotificationPayload{
+		MatchID: matchID,
+		UserA:   userA,
+		UserB:   userB,
+	}, asynq.MaxRetry(3), asynq.Queue(QueueCritical))
 }
 
 // NewServer creates a new asynq worker server

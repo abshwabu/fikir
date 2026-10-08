@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/abshwabu/fikir/backend/internal/cache"
 	"github.com/abshwabu/fikir/backend/internal/domain"
 	apperrors "github.com/abshwabu/fikir/backend/internal/platform/errors"
 	"github.com/abshwabu/fikir/backend/internal/platform/ethiopia"
@@ -47,12 +48,18 @@ type ProfileService interface {
 type profileService struct {
 	profileRepo  domain.ProfileRepository
 	mediaService MediaService
+	cardCache    cache.ProfileCardCache
 }
 
-func NewProfileService(profileRepo domain.ProfileRepository, mediaService MediaService) ProfileService {
+func NewProfileService(profileRepo domain.ProfileRepository, mediaService MediaService, cardCache ...cache.ProfileCardCache) ProfileService {
+	var cc cache.ProfileCardCache
+	if len(cardCache) > 0 {
+		cc = cardCache[0]
+	}
 	return &profileService{
 		profileRepo:  profileRepo,
 		mediaService: mediaService,
+		cardCache:    cc,
 	}
 }
 
@@ -160,12 +167,19 @@ func (s *profileService) UpdateProfile(ctx context.Context, userID uuid.UUID, re
 		return nil, fmt.Errorf("failed to save profile: %w", err)
 	}
 
+	if s.cardCache != nil {
+		_ = s.cardCache.Invalidate(ctx, userID)
+	}
+
 	return s.GetProfile(ctx, userID)
 }
 
 func (s *profileService) UpdateInterests(ctx context.Context, userID uuid.UUID, interests []string) ([]string, error) {
 	if err := s.profileRepo.UpdateInterests(ctx, userID, interests); err != nil {
 		return nil, fmt.Errorf("failed to update interests: %w", err)
+	}
+	if s.cardCache != nil {
+		_ = s.cardCache.Invalidate(ctx, userID)
 	}
 	return s.profileRepo.GetUserInterests(ctx, userID)
 }
@@ -174,6 +188,9 @@ func (s *profileService) UpdateLocation(ctx context.Context, userID uuid.UUID, r
 	city, region := ethiopia.ResolveRegion(req.City)
 	if err := s.profileRepo.UpdateLocation(ctx, userID, req.Latitude, req.Longitude, city, region); err != nil {
 		return nil, fmt.Errorf("failed to update location: %w", err)
+	}
+	if s.cardCache != nil {
+		_ = s.cardCache.Invalidate(ctx, userID)
 	}
 
 	return s.GetProfile(ctx, userID)

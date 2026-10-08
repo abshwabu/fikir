@@ -27,6 +27,9 @@ type Config struct {
 	CORS AllowedOriginsConfig
 
 	RateLimit RateLimitConfig
+
+	Swipe     SwipeConfig
+	Discovery DiscoveryConfig
 }
 
 type DatabaseConfig struct {
@@ -98,6 +101,18 @@ type AllowedOriginsConfig struct {
 type RateLimitConfig struct {
 	RequestsPerMinute int `envconfig:"RATE_LIMIT_RPM" default:"100" validate:"min=1"`
 	Burst             int `envconfig:"RATE_LIMIT_BURST" default:"20" validate:"min=1"`
+}
+
+type SwipeConfig struct {
+	DailyLikeLimit int           `envconfig:"SWIPE_DAILY_LIKE_LIMIT" default:"50" validate:"min=1"`
+	LimitWindow    time.Duration `envconfig:"SWIPE_LIMIT_WINDOW" default:"12h"`
+	SuperLikeLimit int           `envconfig:"SWIPE_SUPER_LIKE_LIMIT" default:"1" validate:"min=1"`
+}
+
+type DiscoveryConfig struct {
+	DeckTargetSize      int `envconfig:"DISCOVERY_DECK_TARGET_SIZE" default:"100" validate:"min=10"`
+	DeckRefillThreshold int `envconfig:"DISCOVERY_DECK_REFILL_THRESHOLD" default:"30" validate:"min=5"`
+	PageLimit           int `envconfig:"DISCOVERY_PAGE_LIMIT" default:"15" validate:"min=1"`
 }
 
 // Load loads configuration from environment variables and validates it

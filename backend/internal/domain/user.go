@@ -27,6 +27,7 @@ type User struct {
 	PremiumUntil *time.Time `json:"premium_until,omitempty"`
 	Locale       string     `json:"locale"`
 	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
+	BoostUntil   *time.Time `json:"boost_until,omitempty"`
 }
 
 // UserRepository defines persistent operations on Users

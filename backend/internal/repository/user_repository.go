@@ -78,6 +78,11 @@ func mapDBUserToDomain(u User) *domain.User {
 		t := u.DeletedAt.Time
 		deletedAt = &t
 	}
+	var boostUntil *time.Time
+	if u.BoostUntil.Valid {
+		t := u.BoostUntil.Time
+		boostUntil = &t
+	}
 	return &domain.User{
 		ID:           u.ID,
 		PhoneE164:    u.PhoneE164,
@@ -88,5 +93,6 @@ func mapDBUserToDomain(u User) *domain.User {
 		PremiumUntil: premiumUntil,
 		Locale:       u.Locale,
 		DeletedAt:    deletedAt,
+		BoostUntil:   boostUntil,
 	}
 }

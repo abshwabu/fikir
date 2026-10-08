@@ -10,7 +10,9 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
+	"github.com/abshwabu/fikir/backend/internal/cache"
 	"github.com/abshwabu/fikir/backend/internal/config"
 	"github.com/abshwabu/fikir/backend/internal/platform/logger"
 	"github.com/abshwabu/fikir/backend/internal/platform/media"
@@ -45,9 +47,29 @@ func main() {
 	}
 	defer dbPool.Close()
 
+	// Initialize Redis for caches & worker operations
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     cfg.Redis.Addr(),
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.CacheDB,
+	})
+	defer func() {
+		_ = rdb.Close()
+	}()
+
+	swipeCache := cache.NewSwipeCache(rdb)
+	cardCache := cache.NewProfileCardCache(rdb)
+	deckCache := cache.NewDeckCache(rdb)
+
 	queries := repository.New(dbPool)
 	userRepo := repository.NewUserRepository(queries)
 	profileRepo := repository.NewProfileRepository(queries)
+	discoveryRepo := repository.NewDiscoveryRepository(queries)
+	swipeRepo := repository.NewSwipeRepository(queries)
+	matchRepo := repository.NewMatchRepository(queries, dbPool, discoveryRepo)
+	blockRepo := repository.NewBlockRepository(queries)
+	reportRepo := repository.NewReportRepository(queries)
+
 	smsSender := sms.NewFromConfig(cfg.SMS)
 
 	storageClient, err := storage.New(cfg.MinIO)
@@ -60,7 +82,10 @@ func main() {
 
 	processor := media.NewProcessor()
 	moderator := media.NewDefaultModerator(cfg.AppEnv != "production")
-	mediaService := service.NewMediaService(profileRepo, storageClient, queueClient, processor, moderator, cfg.CDNBaseURL)
+	mediaService := service.NewMediaService(profileRepo, storageClient, queueClient, processor, moderator, cfg.CDNBaseURL, cardCache)
+
+	discoveryService := service.NewDiscoveryService(cfg.Discovery, discoveryRepo, profileRepo, deckCache, cardCache, swipeCache, queueClient)
+	swipeService := service.NewSwipeService(cfg.Swipe, userRepo, profileRepo, swipeRepo, matchRepo, blockRepo, reportRepo, discoveryRepo, swipeCache, cardCache, queueClient)
 
 	srv := queue.NewServer(cfg.Redis, 10)
 	mux := asynq.NewServeMux()
@@ -105,6 +130,53 @@ func main() {
 		}
 		log.Info().Str("photo_id", payload.PhotoID.String()).Str("original_key", payload.OriginalKey).Msg("Processing image in worker")
 		return mediaService.ProcessImage(ctx, payload.PhotoID, payload.UserID, payload.OriginalKey)
+	})
+
+	// Handler for async swipe persistence
+	mux.HandleFunc(queue.TypeSwipeRecord, func(ctx context.Context, t *asynq.Task) error {
+		var payload queue.SwipeRecordPayload
+		if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+			log.Error().Err(err).Msg("Invalid swipe record task payload")
+			return err
+		}
+		createdAt := time.Now().UTC()
+		if payload.CreatedAt != "" {
+			if parsed, err := time.Parse(time.RFC3339Nano, payload.CreatedAt); err == nil {
+				createdAt = parsed
+			}
+		}
+		log.Debug().
+			Str("swiper_id", payload.SwiperID.String()).
+			Str("target_id", payload.TargetID.String()).
+			Str("direction", payload.Direction).
+			Msg("Persisting swipe in worker")
+		return swipeService.ProcessSwipeRecord(ctx, payload.SwiperID, payload.TargetID, payload.Direction, createdAt)
+	})
+
+	// Handler for candidate deck refill
+	mux.HandleFunc(queue.TypeDeckRefill, func(ctx context.Context, t *asynq.Task) error {
+		var payload queue.DeckRefillPayload
+		if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+			log.Error().Err(err).Msg("Invalid deck refill task payload")
+			return err
+		}
+		log.Info().Str("user_id", payload.UserID.String()).Msg("Refilling candidate deck in worker")
+		return discoveryService.RefillDeck(ctx, payload.UserID)
+	})
+
+	// Handler for match notifications
+	mux.HandleFunc(queue.TypeMatchNotification, func(ctx context.Context, t *asynq.Task) error {
+		var payload queue.MatchNotificationPayload
+		if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+			log.Error().Err(err).Msg("Invalid match notification task payload")
+			return err
+		}
+		log.Info().
+			Str("match_id", payload.MatchID.String()).
+			Str("user_a", payload.UserA.String()).
+			Str("user_b", payload.UserB.String()).
+			Msg("Dispatching mutual match notification in worker")
+		return nil
 	})
 
 	mux.HandleFunc(queue.TypeSendNotification, func(ctx context.Context, t *asynq.Task) error {
