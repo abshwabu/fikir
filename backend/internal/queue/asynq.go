@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 
 	"github.com/abshwabu/fikir/backend/internal/config"
@@ -30,6 +31,12 @@ type SendSMSPayload struct {
 
 type AccountPurgePayload struct {
 	RetentionDays int `json:"retention_days"`
+}
+
+type ImageProcessPayload struct {
+	PhotoID     uuid.UUID `json:"photo_id"`
+	UserID      uuid.UUID `json:"user_id"`
+	OriginalKey string    `json:"original_key"`
 }
 
 // Client wraps asynq.Client to enqueue background jobs
@@ -72,6 +79,15 @@ func (c *Client) EnqueueSendSMS(ctx context.Context, to, message string) (*asynq
 		To:      to,
 		Message: message,
 	}, asynq.MaxRetry(3), asynq.Queue(QueueCritical))
+}
+
+// EnqueueImageProcess enqueues an image processing task
+func (c *Client) EnqueueImageProcess(ctx context.Context, photoID, userID uuid.UUID, originalKey string) (*asynq.TaskInfo, error) {
+	return c.Enqueue(ctx, TypeImageProcess, ImageProcessPayload{
+		PhotoID:     photoID,
+		UserID:      userID,
+		OriginalKey: originalKey,
+	}, asynq.MaxRetry(3), asynq.Queue(QueueDefault))
 }
 
 // NewServer creates a new asynq worker server

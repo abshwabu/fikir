@@ -24,10 +24,10 @@ seed: ## Run database seeder inside Docker
 	$(COMPOSE) run --rm --entrypoint "go run ./cmd/seed" api
 
 test: ## Run backend unit and integration tests inside Docker
-	docker run --rm --net=host -e TESTCONTAINERS_RYUK_DISABLED=true -v $(CURDIR)/backend:/app -v $(HOME)/go/pkg/mod:/go/pkg/mod -v /var/run/docker.sock:/var/run/docker.sock -w /app golang:1.24-alpine sh -c "go test -v ./..."
+	docker run --rm --net=host -e TESTCONTAINERS_RYUK_DISABLED=true -v $(CURDIR)/backend:/app -v $(HOME)/go/pkg/mod:/go/pkg/mod -v /var/run/docker.sock:/var/run/docker.sock -w /app fikir-api sh -c "go test -v ./..."
 
 lint: ## Run golangci-lint static analysis inside Docker
-	docker run --rm -v $(CURDIR)/backend:/app -v $(HOME)/go/pkg/mod:/go/pkg/mod -w /app golangci/golangci-lint:v1.64.5 golangci-lint run --timeout 5m ./...
+	docker run --rm -v $(CURDIR)/backend:/app -v $(HOME)/go/pkg/mod:/go/pkg/mod -w /app fikir-api golangci-lint run --timeout 5m ./...
 
 build-apk: ## Build Flutter Android APK using CirrusLabs Flutter Docker container
 	docker run --rm -v $(CURDIR)/mobile:/app -w /app ghcr.io/cirruslabs/flutter:latest flutter build apk

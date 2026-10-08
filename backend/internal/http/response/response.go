@@ -3,6 +3,7 @@ package response
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 
 	apperrors "github.com/abshwabu/fikir/backend/internal/platform/errors"
@@ -50,6 +51,7 @@ func Error(w http.ResponseWriter, err error) {
 	}
 
 	// Default unhandled error to 500 internal server error
+	log.Printf("[ERROR] unhandled HTTP error: %v", err)
 	JSON(w, http.StatusInternalServerError, apperrors.ErrorResponse{
 		Error: apperrors.ErrorBody{
 			Code:    apperrors.CodeInternalServer,

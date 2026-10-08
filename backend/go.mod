@@ -3,6 +3,8 @@ module github.com/abshwabu/fikir/backend
 go 1.24
 
 require (
+	github.com/bbrks/go-blurhash v1.1.1
+	github.com/davidbyttow/govips/v2 v2.16.0
 	github.com/go-chi/chi/v5 v5.2.1
 	github.com/go-chi/cors v1.2.1
 	github.com/go-playground/validator/v10 v10.25.0
@@ -107,6 +109,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.47.0 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/exp v0.0.0-20240525044651-4c93da0ed11d // indirect
+	golang.org/x/image v0.18.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect

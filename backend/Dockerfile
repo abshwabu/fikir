@@ -7,23 +7,24 @@ FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
-RUN apk add --no-cache git ca-certificates tzdata
+RUN apk add --no-cache git ca-certificates tzdata vips-dev gcc musl-dev pkgconfig
 
 COPY go.mod go.sum* ./
 RUN go mod download || true
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/api ./cmd/api
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/worker ./cmd/worker
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /bin/api ./cmd/api
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /bin/worker ./cmd/worker
 
 # Stage 2: Development with Hot-Reload (Air)
 FROM golang:1.24-alpine AS dev
 
 WORKDIR /app
 
-RUN apk add --no-cache git curl ca-certificates tzdata
+RUN apk add --no-cache git curl ca-certificates tzdata vips-dev gcc musl-dev pkgconfig
 RUN go install github.com/air-verse/air@v1.61.7
+COPY --from=golangci/golangci-lint:v1.64.5 /usr/bin/golangci-lint /usr/local/bin/golangci-lint
 
 COPY go.mod go.sum* ./
 RUN go mod download || true
@@ -39,7 +40,7 @@ FROM alpine:3.20 AS runner
 
 WORKDIR /app
 
-RUN apk --no-cache add ca-certificates tzdata curl
+RUN apk --no-cache add ca-certificates tzdata curl vips
 
 # Create non-root user and group
 RUN addgroup -S -g 10001 appgroup && \

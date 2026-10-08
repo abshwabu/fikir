@@ -13,9 +13,12 @@ import (
 
 	"github.com/abshwabu/fikir/backend/internal/config"
 	"github.com/abshwabu/fikir/backend/internal/platform/logger"
+	"github.com/abshwabu/fikir/backend/internal/platform/media"
 	"github.com/abshwabu/fikir/backend/internal/platform/sms"
 	"github.com/abshwabu/fikir/backend/internal/queue"
 	"github.com/abshwabu/fikir/backend/internal/repository"
+	"github.com/abshwabu/fikir/backend/internal/service"
+	"github.com/abshwabu/fikir/backend/internal/storage"
 )
 
 func main() {
@@ -42,8 +45,22 @@ func main() {
 	}
 	defer dbPool.Close()
 
-	userRepo := repository.NewUserRepository(repository.New(dbPool))
+	queries := repository.New(dbPool)
+	userRepo := repository.NewUserRepository(queries)
+	profileRepo := repository.NewProfileRepository(queries)
 	smsSender := sms.NewFromConfig(cfg.SMS)
+
+	storageClient, err := storage.New(cfg.MinIO)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize storage client for worker")
+	}
+
+	queueClient := queue.NewClient(cfg.Redis)
+	defer queueClient.Close()
+
+	processor := media.NewProcessor()
+	moderator := media.NewDefaultModerator(cfg.AppEnv != "production")
+	mediaService := service.NewMediaService(profileRepo, storageClient, queueClient, processor, moderator, cfg.CDNBaseURL)
 
 	srv := queue.NewServer(cfg.Redis, 10)
 	mux := asynq.NewServeMux()
@@ -79,10 +96,15 @@ func main() {
 		return nil
 	})
 
-	// Placeholder handlers
+	// Handler for async image processing with libvips
 	mux.HandleFunc(queue.TypeImageProcess, func(ctx context.Context, t *asynq.Task) error {
-		log.Info().Str("type", t.Type()).Msg("Processing image task placeholder")
-		return nil
+		var payload queue.ImageProcessPayload
+		if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+			log.Error().Err(err).Msg("Invalid image process task payload")
+			return err
+		}
+		log.Info().Str("photo_id", payload.PhotoID.String()).Str("original_key", payload.OriginalKey).Msg("Processing image in worker")
+		return mediaService.ProcessImage(ctx, payload.PhotoID, payload.UserID, payload.OriginalKey)
 	})
 
 	mux.HandleFunc(queue.TypeSendNotification, func(ctx context.Context, t *asynq.Task) error {

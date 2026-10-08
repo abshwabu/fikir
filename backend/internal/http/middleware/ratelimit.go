@@ -39,7 +39,7 @@ func NewRateLimiter(rdb *redis.Client, log zerolog.Logger, requestsPerMinute int
 func (rl *RateLimiter) Handler() func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if rl.rdb == nil {
+			if rl.rdb == nil || rl.limit <= 0 {
 				next.ServeHTTP(w, r)
 				return
 			}

@@ -12,19 +12,35 @@ import (
 )
 
 type Querier interface {
+	AddUserInterestByName(ctx context.Context, arg AddUserInterestByNameParams) error
+	ClearUserInterests(ctx context.Context, userID uuid.UUID) error
+	CountApprovedProfilePhotos(ctx context.Context, userID uuid.UUID) (int64, error)
+	CountProfilePhotos(ctx context.Context, userID uuid.UUID) (int64, error)
 	CreateAuthAuditLog(ctx context.Context, arg CreateAuthAuditLogParams) (AuthAuditLog, error)
+	CreateProfilePhoto(ctx context.Context, arg CreateProfilePhotoParams) (ProfilePhoto, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	CreateVerification(ctx context.Context, arg CreateVerificationParams) (Verification, error)
+	DeleteProfilePhoto(ctx context.Context, arg DeleteProfilePhotoParams) error
+	GetPhotoByID(ctx context.Context, id uuid.UUID) (ProfilePhoto, error)
+	GetPhotosByUserID(ctx context.Context, userID uuid.UUID) ([]ProfilePhoto, error)
+	GetProfileByUserID(ctx context.Context, userID uuid.UUID) (GetProfileByUserIDRow, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByPhone(ctx context.Context, phoneE164 string) (User, error)
+	GetUserInterests(ctx context.Context, userID uuid.UUID) ([]string, error)
 	PurgeDeletedUsers(ctx context.Context, deletedAt pgtype.Timestamptz) (int64, error)
 	RevokeAllUserTokens(ctx context.Context, userID uuid.UUID) error
 	RevokeRefreshToken(ctx context.Context, id uuid.UUID) error
 	RevokeTokenFamily(ctx context.Context, familyID uuid.UUID) error
 	SoftDeleteUser(ctx context.Context, id uuid.UUID) error
+	UpdatePhotoPosition(ctx context.Context, arg UpdatePhotoPositionParams) error
+	UpdateProfileCompleteness(ctx context.Context, arg UpdateProfileCompletenessParams) error
+	UpdateProfileLocation(ctx context.Context, arg UpdateProfileLocationParams) error
+	UpdateProfilePhoto(ctx context.Context, arg UpdateProfilePhotoParams) error
 	UpdateUserLastActive(ctx context.Context, id uuid.UUID) error
 	UpsertDevice(ctx context.Context, arg UpsertDeviceParams) (Device, error)
+	UpsertProfile(ctx context.Context, arg UpsertProfileParams) (UpsertProfileRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

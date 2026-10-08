@@ -30,4 +30,6 @@ type Container struct {
 	User     UserService
 	Matching MatchingService
 	Chat     ChatService
+	Profile  ProfileService
+	Media    MediaService
 }

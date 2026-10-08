@@ -166,3 +166,13 @@ type UserInterest struct {
 	UserID     uuid.UUID `json:"user_id"`
 	InterestID int32     `json:"interest_id"`
 }
+
+type Verification struct {
+	ID         uuid.UUID          `json:"id"`
+	UserID     uuid.UUID          `json:"user_id"`
+	PhotoUrl   string             `json:"photo_url"`
+	Pose       string             `json:"pose"`
+	Status     string             `json:"status"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	ReviewedAt pgtype.Timestamptz `json:"reviewed_at"`
+}

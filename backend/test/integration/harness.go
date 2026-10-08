@@ -115,6 +115,7 @@ func (h *Harness) ApplyMigrations(ctx context.Context) error {
 	migrations := []string{
 		"000001_init.up.sql",
 		"000002_auth.up.sql",
+		"000003_media_verification.up.sql",
 	}
 
 	for _, m := range migrations {

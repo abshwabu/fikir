@@ -1,12 +1,13 @@
 openapi: 3.0.3
 info:
-  title: Fikir Dating App API - Authentication & Account Management
-  version: 1.0.0
+  title: Fikir Dating App API - Authentication, Profiles & Media
+  version: 1.1.0
   description: |
-    Production-ready authentication API for Fikir dating app in Ethiopia.
+    Production-ready backend API for Fikir dating app in Ethiopia.
     Provides phone-based OTP authentication (Ethio Telecom and Safaricom Ethiopia),
     EdDSA JWT access tokens, rotating refresh tokens with reuse detection,
-    and 30-day soft deletion for accounts.
+    profile management with Ethiopian region/city localization,
+    and direct-to-storage media pipeline with libvips image compression.
 
 servers:
   - url: http://localhost/api
@@ -177,6 +178,200 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /v1/me/profile:
+    get:
+      summary: Get authenticated user profile
+      description: Fetches full dating profile including photos with CDN URLs and completeness score.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      summary: Update profile attributes
+      description: |
+        Updates profile fields, validates age >= 18 from birthdate,
+        resolves Ethiopian region from city, and updates completeness score.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        '400':
+          description: Underage or invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/me/interests:
+    put:
+      summary: Update user interests
+      description: Sets the list of interests tags for the user.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInterestsRequest'
+      responses:
+        '200':
+          description: Interests updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateInterestsResponse'
+
+  /v1/me/location:
+    put:
+      summary: Update location and coordinates
+      description: Updates user geolocation coordinates (PostGIS) and resolves Ethiopian region.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLocationRequest'
+      responses:
+        '200':
+          description: Location updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+
+  /v1/me/photos/upload-url:
+    post:
+      summary: Request presigned direct upload URL
+      description: Generates a presigned PUT URL for private original storage (limit 8MB, max 6 photos).
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadURLRequest'
+      responses:
+        '200':
+          description: Presigned upload URL created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadURLResponse'
+        '400':
+          description: Disallowed format, size limit exceeded, or maximum 6 photos reached
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/me/photos/{id}/complete:
+    post:
+      summary: Signal photo upload completion
+      description: Triggers async worker image processing pipeline (WebP/AVIF generation, BlurHash, EXIF removal).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '202':
+          description: Image processing task queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompleteUploadResponse'
+
+  /v1/me/photos/{id}:
+    delete:
+      summary: Delete profile photo
+      description: Deletes photo, cleans up storage, and automatically reorders remaining photos.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Photo deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /v1/me/photos/reorder:
+    put:
+      summary: Reorder profile photos
+      description: Updates position order for user's photos (positions 1..N).
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderPhotosRequest'
+      responses:
+        '200':
+          description: Photos reordered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReorderPhotosResponse'
+
+  /v1/me/verification:
+    post:
+      summary: Submit pose-based selfie verification
+      description: Submits a selfie photo URL and pose for manual admin verification review.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerificationRequest'
+      responses:
+        '201':
+          description: Verification submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationResponse'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -313,6 +508,304 @@ components:
           example: ok
         message:
           type: string
+
+    ProfileResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+          example: 'Sara Bekele'
+        birthdate:
+          type: string
+          example: '1998-05-14'
+        gender:
+          type: string
+          example: 'female'
+        interested_in:
+          type: array
+          items:
+            type: string
+        bio:
+          type: string
+          example: 'Coffee lover in Addis Ababa'
+        job_title:
+          type: string
+          example: 'Software Engineer'
+        education:
+          type: string
+          example: 'Addis Ababa University'
+        height_cm:
+          type: integer
+          example: 168
+        religion:
+          type: string
+          example: 'Orthodox'
+        languages:
+          type: array
+          items:
+            type: string
+        city:
+          type: string
+          example: 'Bole'
+        region:
+          type: string
+          example: 'Addis Ababa'
+        location:
+          $ref: '#/components/schemas/Coordinates'
+        show_me:
+          type: boolean
+          example: true
+        distance_pref_km:
+          type: integer
+          example: 30
+        age_min:
+          type: integer
+          example: 22
+        age_max:
+          type: integer
+          example: 35
+        verified:
+          type: boolean
+          example: false
+        completeness_score:
+          type: integer
+          example: 85
+        interests:
+          type: array
+          items:
+            type: string
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhotoObject'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+        birthdate:
+          type: string
+          description: 'Format YYYY-MM-DD (must be at least 18 years old)'
+        gender:
+          type: string
+        interested_in:
+          type: array
+          items:
+            type: string
+        bio:
+          type: string
+        job_title:
+          type: string
+        education:
+          type: string
+        height_cm:
+          type: integer
+        religion:
+          type: string
+        languages:
+          type: array
+          items:
+            type: string
+        city:
+          type: string
+        show_me:
+          type: boolean
+        distance_pref_km:
+          type: integer
+        age_min:
+          type: integer
+        age_max:
+          type: integer
+
+    Coordinates:
+      type: object
+      properties:
+        latitude:
+          type: number
+          example: 9.0107
+        longitude:
+          type: number
+          example: 38.7612
+
+    UpdateLocationRequest:
+      type: object
+      required:
+        - latitude
+        - longitude
+        - city
+      properties:
+        latitude:
+          type: number
+          example: 9.0107
+        longitude:
+          type: number
+          example: 38.7612
+        city:
+          type: string
+          example: 'Bole'
+
+    UpdateInterestsRequest:
+      type: object
+      required:
+        - interests
+      properties:
+        interests:
+          type: array
+          items:
+            type: string
+
+    UpdateInterestsResponse:
+      type: object
+      properties:
+        interests:
+          type: array
+          items:
+            type: string
+
+    UploadURLRequest:
+      type: object
+      required:
+        - content_type
+        - file_size
+      properties:
+        content_type:
+          type: string
+          enum: [image/jpeg, image/png, image/heic, image/webp]
+          example: image/jpeg
+        file_size:
+          type: integer
+          example: 2450000
+
+    UploadURLResponse:
+      type: object
+      properties:
+        photo_id:
+          type: string
+          format: uuid
+        upload_url:
+          type: string
+          example: 'http://minio:9000/fikir-media-original/originals/...'
+        expires_in:
+          type: integer
+          example: 900
+
+    CompleteUploadResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: 'image processing enqueued'
+        photo_id:
+          type: string
+          format: uuid
+
+    ReorderPhotosRequest:
+      type: object
+      required:
+        - photo_ids
+      properties:
+        photo_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    ReorderPhotosResponse:
+      type: object
+      properties:
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhotoObject'
+
+    PhotoVariantDetail:
+      type: object
+      properties:
+        url:
+          type: string
+        width:
+          type: integer
+        height:
+          type: integer
+        size:
+          type: integer
+
+    PhotoObject:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        position:
+          type: integer
+          example: 1
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        blurhash:
+          type: string
+          example: 'LEHLh[WB2yk8pyo0adRj00WYcg4q'
+        dominant_color:
+          type: string
+          example: '#3b5f88'
+        width:
+          type: integer
+          example: 1080
+        height:
+          type: integer
+          example: 1350
+        url:
+          type: string
+          example: 'http://localhost/media/photos/uid/hash/card.webp'
+        variants:
+          type: object
+          description: Hierarchical variants (thumb, card, full) with format options
+        created_at:
+          type: string
+          format: date-time
+
+    VerificationRequest:
+      type: object
+      required:
+        - photo_url
+        - pose
+      properties:
+        photo_url:
+          type: string
+          example: 'http://localhost/media/photos/uid/hash/full.webp'
+        pose:
+          type: string
+          example: 'turn_head_left'
+
+    VerificationResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        photo_url:
+          type: string
+        pose:
+          type: string
+        status:
+          type: string
+          example: 'pending'
+        created_at:
+          type: string
+          format: date-time
 
     ErrorDetail:
       type: object

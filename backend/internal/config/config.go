@@ -65,6 +65,7 @@ type MinIOConfig struct {
 	RootPassword   string `envconfig:"MINIO_ROOT_PASSWORD" default:"miniopassword" validate:"required"`
 	BucketOriginal string `envconfig:"MINIO_BUCKET_ORIGINAL" default:"fikir-media-original" validate:"required"`
 	BucketPublic   string `envconfig:"MINIO_BUCKET_PUBLIC" default:"fikir-media-public" validate:"required"`
+	Region         string `envconfig:"MINIO_REGION" default:"us-east-1"`
 	UseSSL         bool   `envconfig:"MINIO_USE_SSL" default:"false"`
 }
 
