@@ -35,21 +35,55 @@ class MatchRepository {
         final matchesList = (response.data!['matches'] as List<dynamic>?) ?? [];
         for (final item in matchesList) {
           if (item is Map<String, dynamic>) {
-            final id = item['id'] as String;
-            final matchedUser = item['matched_user'] as Map<String, dynamic>? ?? {};
+            final id = (item['id'] ?? '').toString();
+            if (id.isEmpty) continue;
+
+            final matchedUser = (item['other_user'] as Map<String, dynamic>?) ??
+                (item['matched_user'] as Map<String, dynamic>?) ??
+                {};
+
+            String? photoUrl;
+            String? blurhash;
+            final photos = matchedUser['photos'];
+            if (photos is List && photos.isNotEmpty) {
+              final first = photos.first;
+              if (first is Map) {
+                photoUrl = first['url'] as String?;
+                blurhash = first['blurhash'] as String?;
+              } else if (first is String) {
+                photoUrl = first;
+              }
+            }
+            photoUrl ??= matchedUser['photo_url'] as String?;
+            blurhash ??= matchedUser['blurhash'] as String?;
+
+            String? lastMsgText;
+            DateTime? lastMsgAt;
+            final lastMsg = item['last_message'];
+            if (lastMsg is Map) {
+              lastMsgText = (lastMsg['body'] ?? lastMsg['content']) as String?;
+              if (lastMsg['created_at'] != null) {
+                lastMsgAt = DateTime.tryParse(lastMsg['created_at'].toString());
+              }
+            } else if (lastMsg is String) {
+              lastMsgText = lastMsg;
+            }
+
+            if (item['last_message_at'] != null) {
+              lastMsgAt ??= DateTime.tryParse(item['last_message_at'].toString());
+            }
+
             final match = CachedMatch(
               id: id,
-              matchedUserId: (matchedUser['id'] as String?) ?? '',
-              matchedUserName: (matchedUser['name'] as String?) ?? 'User',
-              matchedUserPhotoUrl: matchedUser['photo_url'] as String?,
-              matchedUserBlurhash: matchedUser['blurhash'] as String?,
-              lastMessageText: item['last_message'] as String?,
-              lastMessageAt: item['last_message_at'] != null
-                  ? DateTime.tryParse(item['last_message_at'] as String)
-                  : null,
+              matchedUserId: (matchedUser['user_id'] ?? matchedUser['id'] ?? '').toString(),
+              matchedUserName: (matchedUser['display_name'] ?? matchedUser['name'] ?? 'User').toString(),
+              matchedUserPhotoUrl: photoUrl,
+              matchedUserBlurhash: blurhash,
+              lastMessageText: lastMsgText,
+              lastMessageAt: lastMsgAt,
               unreadCount: (item['unread_count'] as num?)?.toInt() ?? 0,
               createdAt: item['created_at'] != null
-                  ? DateTime.parse(item['created_at'] as String)
+                  ? DateTime.tryParse(item['created_at'].toString()) ?? DateTime.now()
                   : DateTime.now(),
               cachedAt: DateTime.now(),
             );

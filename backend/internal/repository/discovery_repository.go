@@ -132,9 +132,17 @@ func (r *pgDiscoveryRepository) GetProfileCard(ctx context.Context, userID uuid.
 		photos = []ProfilePhoto{}
 	}
 
+	hasApproved := false
+	for _, ph := range photos {
+		if ph.Status == "approved" {
+			hasApproved = true
+			break
+		}
+	}
+
 	cardPhotos := make([]domain.ProfileCardPhoto, 0, len(photos))
 	for _, ph := range photos {
-		if ph.Status != "approved" && len(photos) > 1 {
+		if hasApproved && ph.Status != "approved" {
 			continue
 		}
 		cardPhotos = append(cardPhotos, r.formatCardPhoto(ph, acceptHeader))

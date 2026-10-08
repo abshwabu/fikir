@@ -8,6 +8,7 @@ import 'package:fikir/core/network/websocket_manager.dart';
 import 'package:fikir/core/storage/shared_prefs.dart';
 import 'package:fikir/features/chat/data/chat_repository.dart';
 import 'package:fikir/features/matches/data/match_repository.dart';
+import 'package:fikir/features/profile/data/profile_repository.dart';
 import 'package:fikir/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -66,8 +67,9 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
 
     _messageController.addListener(_onTextChanged);
 
-    // Initial mark as read and replay missed messages
+    // Initial mark as read, replay missed messages, and ensure WS connected
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(webSocketManagerProvider).connect();
       ref.read(chatRepositoryProvider).markAsRead(widget.matchId);
       ref.read(chatRepositoryProvider).replayMissed(widget.matchId);
     });
@@ -85,6 +87,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
   }
 
   void _onTextChanged() {
+    setState(() {});
     final text = _messageController.text;
     if (text.isNotEmpty && !_isTypingSent) {
       _isTypingSent = true;
@@ -368,13 +371,19 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
                     );
                   }
 
+                  final currentUserId = ref.watch(myUserProfileProvider).valueOrNull?.id;
+
                   return ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     itemCount: messages.length,
                     itemBuilder: (context, index) {
                       final msg = messages[index];
-                      final isMe = msg.senderId == 'me';
+                      final isMe = msg.senderId == 'me' ||
+                          (currentUserId != null && msg.senderId == currentUserId) ||
+                          (widget.matchedUserId != null &&
+                              widget.matchedUserId!.isNotEmpty &&
+                              msg.senderId != widget.matchedUserId);
 
                       // Date separator check
                       final showDateSeparator = index == 0 ||
@@ -684,45 +693,54 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
               }).toList(),
             ),
           ),
-          Row(
-            children: [
-              // Photo attachment button
-              IconButton(
-                icon: const Icon(Icons.photo_camera_rounded, color: FikirColors.primaryMagenta),
-                onPressed: () {
-                  _pickAndSendImage(ImageSource.gallery);
-                },
-              ),
-              Expanded(
-                child: TextField(
-                  controller: _messageController,
-                  maxLines: 4,
-                  minLines: 1,
-                  decoration: InputDecoration(
-                    hintText: l10n?.typeMessage ?? 'Type a message...',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(24),
-                      borderSide: BorderSide.none,
-                    ),
-                    filled: true,
+          Builder(
+            builder: (context) {
+              final hasText = _messageController.text.trim().isNotEmpty;
+              return Row(
+                children: [
+                  // Photo attachment button
+                  IconButton(
+                    icon: const Icon(Icons.photo_camera_rounded, color: FikirColors.primaryMagenta),
+                    onPressed: () {
+                      _pickAndSendImage(ImageSource.gallery);
+                    },
                   ),
-                  onSubmitted: (_) => _sendMessage(),
-                ),
-              ),
-              const SizedBox(width: 4),
-              // Mic / Voice Button or Send Button
-              if (_messageController.text.trim().isEmpty)
-                IconButton(
-                  icon: const Icon(Icons.mic_rounded, color: FikirColors.primaryCoral),
-                  onPressed: _startVoiceRecording,
-                )
-              else
-                IconButton(
-                  icon: const Icon(Icons.send_rounded, color: FikirColors.primaryCoral),
-                  onPressed: _sendMessage,
-                ),
-            ],
+                  Expanded(
+                    child: TextField(
+                      controller: _messageController,
+                      maxLines: 4,
+                      minLines: 1,
+                      decoration: InputDecoration(
+                        hintText: l10n?.typeMessage ?? 'Type a message...',
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                      ),
+                      onChanged: (_) => setState(() {}),
+                      onSubmitted: (_) => _sendMessage(),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  // Mic / Voice Button or Prominent Send Button
+                  if (hasText)
+                    IconButton.filled(
+                      style: IconButton.styleFrom(
+                        backgroundColor: FikirColors.primaryCoral,
+                      ),
+                      icon: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+                      onPressed: _sendMessage,
+                    )
+                  else
+                    IconButton(
+                      icon: const Icon(Icons.mic_rounded, color: FikirColors.primaryCoral, size: 26),
+                      onPressed: _startVoiceRecording,
+                    ),
+                ],
+              );
+            },
           ),
         ],
       ),

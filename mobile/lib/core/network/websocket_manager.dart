@@ -20,10 +20,21 @@ enum WsConnectionState {
 final webSocketManagerProvider = Provider<WebSocketManager>((ref) {
   final dio = ref.watch(dioProvider);
   final db = ref.watch(databaseProvider);
+  final isLoggedIn = ref.watch(authStateProvider);
   final manager = WebSocketManager(
     dio: dio,
     db: db,
   );
+  if (isLoggedIn) {
+    unawaited(manager.connect());
+  }
+  ref.listen<bool>(authStateProvider, (_, loggedIn) {
+    if (loggedIn) {
+      manager.connect();
+    } else {
+      manager.disconnect();
+    }
+  });
   ref.onDispose(manager.dispose);
   return manager;
 });

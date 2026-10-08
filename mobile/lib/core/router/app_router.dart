@@ -132,10 +132,22 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/chat/:matchId',
         builder: (context, state) {
           final matchId = state.pathParameters['matchId'] ?? '';
-          final matchedUserName = (state.extra as String?) ?? 'Chat';
+          var matchedUserName = 'Chat';
+          String? photoUrl;
+          String? matchedUserId;
+          if (state.extra is Map) {
+            final map = state.extra! as Map;
+            matchedUserName = (map['name'] as String?) ?? 'Chat';
+            photoUrl = map['photo_url'] as String?;
+            matchedUserId = map['user_id'] as String?;
+          } else if (state.extra is String) {
+            matchedUserName = state.extra! as String;
+          }
           return ChatDetailScreen(
             matchId: matchId,
             matchedUserName: matchedUserName,
+            matchedUserPhotoUrl: photoUrl,
+            matchedUserId: matchedUserId,
           );
         },
       ),

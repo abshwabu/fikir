@@ -136,7 +136,14 @@ class MatchesScreen extends ConsumerWidget {
 
     return GestureDetector(
       onTap: () {
-        context.push('/chat/${match.id}', extra: match.matchedUserName);
+        context.push(
+          '/chat/${match.id}',
+          extra: {
+            'name': match.matchedUserName,
+            'photo_url': match.matchedUserPhotoUrl,
+            'user_id': match.matchedUserId,
+          },
+        );
       },
       child: Column(
         children: [
@@ -304,7 +311,14 @@ class MatchesScreen extends ConsumerWidget {
           ],
         ),
         onTap: () {
-          context.push('/chat/${match.id}', extra: match.matchedUserName);
+          context.push(
+            '/chat/${match.id}',
+            extra: {
+              'name': match.matchedUserName,
+              'photo_url': match.matchedUserPhotoUrl,
+              'user_id': match.matchedUserId,
+            },
+          );
         },
         onLongPress: () {
           _showActionDialog(context, ref, match);
