@@ -49,6 +49,10 @@ dependencies:
 
   path: any
   path_provider: any
+
+dependency_overrides:
+  permission_handler_android: 13.0.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

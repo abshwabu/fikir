@@ -10,13 +10,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  const host = String.fromEnvironment('HOST_OVERRIDE', defaultValue: 'localhost');
   AppConfig.initialize(
     const AppConfig(
       flavor: AppFlavor.dev,
       appName: 'Fikir Dev',
-      apiBaseUrl: 'http://10.0.2.2:8080',
-      wsBaseUrl: 'ws://10.0.2.2:8080/ws',
-      cdnBaseUrl: 'http://10.0.2.2:9000/public',
+      apiBaseUrl: 'http://$host:8080',
+      wsBaseUrl: 'ws://$host:8080/ws',
+      cdnBaseUrl: 'http://$host/media',
       enableLogging: true,
     ),
   );
