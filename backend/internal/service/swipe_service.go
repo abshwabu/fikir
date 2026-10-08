@@ -185,6 +185,18 @@ func (s *swipeService) Swipe(ctx context.Context, swiperID, targetID uuid.UUID, 
 				Match:   match,
 			}, nil
 		}
+
+		if direction == domain.SwipeDirectionSuper && s.queueClient != nil {
+			senderName := "Someone"
+			if p, pErr := s.profileRepo.GetByUserID(ctx, swiperID); pErr == nil && p != nil && p.DisplayName != "" {
+				senderName = p.DisplayName
+			}
+			_, _ = s.queueClient.EnqueueSuperLikeNotification(ctx, queue.SuperLikeNotificationPayload{
+				SenderID:    swiperID,
+				RecipientID: targetID,
+				SenderName:  senderName,
+			})
+		}
 	}
 
 	return &SwipeResponse{

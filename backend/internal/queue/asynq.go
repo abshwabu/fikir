@@ -26,6 +26,8 @@ const (
 	TypeSwipeRecord      = "swipe:record"
 	TypeDeckRefill       = "discovery:deck_refill"
 	TypeMatchNotification = "notification:match"
+	TypeChatMessageNotification = "notification:chat_message"
+	TypeSuperLikeNotification   = "notification:super_like"
 )
 
 type SendSMSPayload struct {
@@ -58,6 +60,22 @@ type MatchNotificationPayload struct {
 	MatchID uuid.UUID `json:"match_id"`
 	UserA   uuid.UUID `json:"user_a"`
 	UserB   uuid.UUID `json:"user_b"`
+}
+
+type ChatMessageNotificationPayload struct {
+	MessageID   int64     `json:"message_id"`
+	MatchID     uuid.UUID `json:"match_id"`
+	SenderID    uuid.UUID `json:"sender_id"`
+	RecipientID uuid.UUID `json:"recipient_id"`
+	SenderName  string    `json:"sender_name"`
+	TextSnippet string    `json:"text_snippet"`
+	MsgType     string    `json:"msg_type"`
+}
+
+type SuperLikeNotificationPayload struct {
+	SenderID    uuid.UUID `json:"sender_id"`
+	RecipientID uuid.UUID `json:"recipient_id"`
+	SenderName  string    `json:"sender_name"`
 }
 
 // Client wraps asynq.Client to enqueue background jobs
@@ -135,6 +153,16 @@ func (c *Client) EnqueueMatchNotification(ctx context.Context, matchID, userA, u
 		UserA:   userA,
 		UserB:   userB,
 	}, asynq.MaxRetry(3), asynq.Queue(QueueCritical))
+}
+
+// EnqueueChatMessageNotification enqueues push notification for offline message recipient
+func (c *Client) EnqueueChatMessageNotification(ctx context.Context, payload ChatMessageNotificationPayload) (*asynq.TaskInfo, error) {
+	return c.Enqueue(ctx, TypeChatMessageNotification, payload, asynq.MaxRetry(3), asynq.Queue(QueueCritical))
+}
+
+// EnqueueSuperLikeNotification enqueues push notification for super-like recipient
+func (c *Client) EnqueueSuperLikeNotification(ctx context.Context, payload SuperLikeNotificationPayload) (*asynq.TaskInfo, error) {
+	return c.Enqueue(ctx, TypeSuperLikeNotification, payload, asynq.MaxRetry(3), asynq.Queue(QueueCritical))
 }
 
 // NewServer creates a new asynq worker server

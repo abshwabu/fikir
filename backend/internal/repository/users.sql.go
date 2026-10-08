@@ -24,9 +24,22 @@ type CreateUserParams struct {
 	Locale    string `json:"locale"`
 }
 
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+type CreateUserRow struct {
+	ID           uuid.UUID          `json:"id"`
+	PhoneE164    string             `json:"phone_e164"`
+	Status       string             `json:"status"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	LastActiveAt pgtype.Timestamptz `json:"last_active_at"`
+	IsPremium    bool               `json:"is_premium"`
+	PremiumUntil pgtype.Timestamptz `json:"premium_until"`
+	Locale       string             `json:"locale"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+	BoostUntil   pgtype.Timestamptz `json:"boost_until"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
 	row := q.db.QueryRow(ctx, createUser, arg.PhoneE164, arg.Status, arg.Locale)
-	var i User
+	var i CreateUserRow
 	err := row.Scan(
 		&i.ID,
 		&i.PhoneE164,
@@ -48,9 +61,22 @@ FROM users
 WHERE id = $1 LIMIT 1
 `
 
-func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
+type GetUserByIDRow struct {
+	ID           uuid.UUID          `json:"id"`
+	PhoneE164    string             `json:"phone_e164"`
+	Status       string             `json:"status"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	LastActiveAt pgtype.Timestamptz `json:"last_active_at"`
+	IsPremium    bool               `json:"is_premium"`
+	PremiumUntil pgtype.Timestamptz `json:"premium_until"`
+	Locale       string             `json:"locale"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+	BoostUntil   pgtype.Timestamptz `json:"boost_until"`
+}
+
+func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error) {
 	row := q.db.QueryRow(ctx, getUserByID, id)
-	var i User
+	var i GetUserByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.PhoneE164,
@@ -72,9 +98,22 @@ FROM users
 WHERE phone_e164 = $1 LIMIT 1
 `
 
-func (q *Queries) GetUserByPhone(ctx context.Context, phoneE164 string) (User, error) {
+type GetUserByPhoneRow struct {
+	ID           uuid.UUID          `json:"id"`
+	PhoneE164    string             `json:"phone_e164"`
+	Status       string             `json:"status"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	LastActiveAt pgtype.Timestamptz `json:"last_active_at"`
+	IsPremium    bool               `json:"is_premium"`
+	PremiumUntil pgtype.Timestamptz `json:"premium_until"`
+	Locale       string             `json:"locale"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+	BoostUntil   pgtype.Timestamptz `json:"boost_until"`
+}
+
+func (q *Queries) GetUserByPhone(ctx context.Context, phoneE164 string) (GetUserByPhoneRow, error) {
 	row := q.db.QueryRow(ctx, getUserByPhone, phoneE164)
-	var i User
+	var i GetUserByPhoneRow
 	err := row.Scan(
 		&i.ID,
 		&i.PhoneE164,

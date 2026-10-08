@@ -76,6 +76,11 @@ func (s *Storage) PresignedPutOriginal(ctx context.Context, objectName string, e
 	return s.client.PresignedPutObject(ctx, s.bucketOriginal, objectName, expiry)
 }
 
+// PresignedPutPublic generates a presigned PUT URL for client-direct upload to the public bucket
+func (s *Storage) PresignedPutPublic(ctx context.Context, objectName string, expiry time.Duration) (*url.URL, error) {
+	return s.client.PresignedPutObject(ctx, s.bucketPublic, objectName, expiry)
+}
+
 // PresignedGet generates a presigned download URL for private objects
 func (s *Storage) PresignedGet(ctx context.Context, bucket, objectName string, expiry time.Duration) (*url.URL, error) {
 	return s.client.PresignedGetObject(ctx, bucket, objectName, expiry, nil)

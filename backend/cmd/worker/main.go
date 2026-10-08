@@ -3,19 +3,23 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/abshwabu/fikir/backend/internal/cache"
 	"github.com/abshwabu/fikir/backend/internal/config"
+	"github.com/abshwabu/fikir/backend/internal/domain"
 	"github.com/abshwabu/fikir/backend/internal/platform/logger"
 	"github.com/abshwabu/fikir/backend/internal/platform/media"
+	"github.com/abshwabu/fikir/backend/internal/platform/push"
 	"github.com/abshwabu/fikir/backend/internal/platform/sms"
 	"github.com/abshwabu/fikir/backend/internal/queue"
 	"github.com/abshwabu/fikir/backend/internal/repository"
@@ -164,6 +168,48 @@ func main() {
 		return discoveryService.RefillDeck(ctx, payload.UserID)
 	})
 
+	chatCache := cache.NewChatCache(rdb)
+	deviceRepo := repository.NewDeviceRepository(queries)
+	notifRepo := repository.NewNotificationRepository(queries)
+	pushNotifier := push.NewNotifier(ctx, cfg.FCM)
+
+	dispatchPush := func(ctx context.Context, recipientID uuid.UUID, category, senderName, snippet, collapseKey string, data map[string]string) {
+		settings, locale, err := notifRepo.GetUserNotificationSettings(ctx, recipientID)
+		if err != nil {
+			return
+		}
+
+		if category == push.CategoryNewMatch && !settings.NewMatch {
+			return
+		}
+		if category == push.CategoryNewMessage && !settings.NewMessage {
+			return
+		}
+		if category == push.CategorySuperLike && !settings.SuperLike {
+			return
+		}
+
+		devices, err := deviceRepo.GetActiveDevicesForUser(ctx, recipientID)
+		if err != nil || len(devices) == 0 {
+			return
+		}
+
+		tokens := make([]string, len(devices))
+		for i, d := range devices {
+			tokens[i] = d.FCMToken
+		}
+
+		title, body := push.FormatPush(category, locale, senderName, snippet)
+		_ = pushNotifier.Send(ctx, &push.NotificationMessage{
+			Tokens:      tokens,
+			Category:    category,
+			Title:       title,
+			Body:        body,
+			CollapseKey: collapseKey,
+			Data:        data,
+		})
+	}
+
 	// Handler for match notifications
 	mux.HandleFunc(queue.TypeMatchNotification, func(ctx context.Context, t *asynq.Task) error {
 		var payload queue.MatchNotificationPayload
@@ -176,6 +222,73 @@ func main() {
 			Str("user_a", payload.UserA.String()).
 			Str("user_b", payload.UserB.String()).
 			Msg("Dispatching mutual match notification in worker")
+
+		// 1. Publish match.new real-time frame to both users
+		matchFrame := &domain.WSFrame{
+			Type:    domain.FrameTypeMatchNew,
+			MatchID: &payload.MatchID,
+		}
+		if frameBytes, err := json.Marshal(matchFrame); err == nil {
+			_ = rdb.Publish(ctx, fmt.Sprintf("chat:user:%s", payload.UserA.String()), frameBytes).Err()
+			_ = rdb.Publish(ctx, fmt.Sprintf("chat:user:%s", payload.UserB.String()), frameBytes).Err()
+		}
+
+		// 2. Offline push to User A
+		onlineA, _ := chatCache.IsUserOnline(ctx, payload.UserA)
+		if !onlineA {
+			pB, _ := profileRepo.GetByUserID(ctx, payload.UserB)
+			nameB := "Someone"
+			if pB != nil && pB.DisplayName != "" {
+				nameB = pB.DisplayName
+			}
+			dispatchPush(ctx, payload.UserA, push.CategoryNewMatch, nameB, "", fmt.Sprintf("match_%s", payload.MatchID), map[string]string{"match_id": payload.MatchID.String()})
+		}
+
+		// 3. Offline push to User B
+		onlineB, _ := chatCache.IsUserOnline(ctx, payload.UserB)
+		if !onlineB {
+			pA, _ := profileRepo.GetByUserID(ctx, payload.UserA)
+			nameA := "Someone"
+			if pA != nil && pA.DisplayName != "" {
+				nameA = pA.DisplayName
+			}
+			dispatchPush(ctx, payload.UserB, push.CategoryNewMatch, nameA, "", fmt.Sprintf("match_%s", payload.MatchID), map[string]string{"match_id": payload.MatchID.String()})
+		}
+
+		return nil
+	})
+
+	// Handler for chat message push notifications (recipient offline)
+	mux.HandleFunc(queue.TypeChatMessageNotification, func(ctx context.Context, t *asynq.Task) error {
+		var payload queue.ChatMessageNotificationPayload
+		if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+			log.Error().Err(err).Msg("Invalid chat message notification task payload")
+			return err
+		}
+
+		online, _ := chatCache.IsUserOnline(ctx, payload.RecipientID)
+		if online {
+			return nil
+		}
+
+		dispatchPush(ctx, payload.RecipientID, push.CategoryNewMessage, payload.SenderName, payload.TextSnippet, fmt.Sprintf("match_%s", payload.MatchID.String()), map[string]string{
+			"match_id":   payload.MatchID.String(),
+			"message_id": fmt.Sprintf("%d", payload.MessageID),
+		})
+		return nil
+	})
+
+	// Handler for super-like notifications
+	mux.HandleFunc(queue.TypeSuperLikeNotification, func(ctx context.Context, t *asynq.Task) error {
+		var payload queue.SuperLikeNotificationPayload
+		if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+			log.Error().Err(err).Msg("Invalid super like notification task payload")
+			return err
+		}
+
+		dispatchPush(ctx, payload.RecipientID, push.CategorySuperLike, payload.SenderName, "", fmt.Sprintf("superlike_%s", payload.SenderID.String()), map[string]string{
+			"sender_id": payload.SenderID.String(),
+		})
 		return nil
 	})
 

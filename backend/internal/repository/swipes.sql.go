@@ -83,9 +83,17 @@ type CreateMatchParams struct {
 	UserB uuid.UUID `json:"user_b"`
 }
 
-func (q *Queries) CreateMatch(ctx context.Context, arg CreateMatchParams) (Match, error) {
+type CreateMatchRow struct {
+	ID          uuid.UUID          `json:"id"`
+	UserA       uuid.UUID          `json:"user_a"`
+	UserB       uuid.UUID          `json:"user_b"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UnmatchedAt pgtype.Timestamptz `json:"unmatched_at"`
+}
+
+func (q *Queries) CreateMatch(ctx context.Context, arg CreateMatchParams) (CreateMatchRow, error) {
 	row := q.db.QueryRow(ctx, createMatch, arg.ID, arg.UserA, arg.UserB)
-	var i Match
+	var i CreateMatchRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserA,
@@ -211,9 +219,17 @@ type GetMatchBetweenUsersParams struct {
 	UserB uuid.UUID `json:"user_b"`
 }
 
-func (q *Queries) GetMatchBetweenUsers(ctx context.Context, arg GetMatchBetweenUsersParams) (Match, error) {
+type GetMatchBetweenUsersRow struct {
+	ID          uuid.UUID          `json:"id"`
+	UserA       uuid.UUID          `json:"user_a"`
+	UserB       uuid.UUID          `json:"user_b"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UnmatchedAt pgtype.Timestamptz `json:"unmatched_at"`
+}
+
+func (q *Queries) GetMatchBetweenUsers(ctx context.Context, arg GetMatchBetweenUsersParams) (GetMatchBetweenUsersRow, error) {
 	row := q.db.QueryRow(ctx, getMatchBetweenUsers, arg.UserA, arg.UserB)
-	var i Match
+	var i GetMatchBetweenUsersRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserA,
@@ -230,9 +246,17 @@ FROM matches
 WHERE id = $1
 `
 
-func (q *Queries) GetMatchByID(ctx context.Context, id uuid.UUID) (Match, error) {
+type GetMatchByIDRow struct {
+	ID          uuid.UUID          `json:"id"`
+	UserA       uuid.UUID          `json:"user_a"`
+	UserB       uuid.UUID          `json:"user_b"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UnmatchedAt pgtype.Timestamptz `json:"unmatched_at"`
+}
+
+func (q *Queries) GetMatchByID(ctx context.Context, id uuid.UUID) (GetMatchByIDRow, error) {
 	row := q.db.QueryRow(ctx, getMatchByID, id)
-	var i Match
+	var i GetMatchByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserA,

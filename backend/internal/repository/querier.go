@@ -20,40 +20,52 @@ type Querier interface {
 	CountProfilePhotos(ctx context.Context, userID uuid.UUID) (int64, error)
 	CreateAuthAuditLog(ctx context.Context, arg CreateAuthAuditLogParams) (AuthAuditLog, error)
 	CreateBlock(ctx context.Context, arg CreateBlockParams) error
-	CreateMatch(ctx context.Context, arg CreateMatchParams) (Match, error)
+	CreateMatch(ctx context.Context, arg CreateMatchParams) (CreateMatchRow, error)
+	CreateMessage(ctx context.Context, arg CreateMessageParams) (CreateMessageRow, error)
 	CreateProfilePhoto(ctx context.Context, arg CreateProfilePhotoParams) (ProfilePhoto, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error)
 	CreateReport(ctx context.Context, arg CreateReportParams) (Report, error)
-	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	CreateVerification(ctx context.Context, arg CreateVerificationParams) (Verification, error)
+	DeleteDevice(ctx context.Context, arg DeleteDeviceParams) error
 	DeleteProfilePhoto(ctx context.Context, arg DeleteProfilePhotoParams) error
 	DeleteSwipe(ctx context.Context, arg DeleteSwipeParams) error
+	GetActiveDevicesForUser(ctx context.Context, userID uuid.UUID) ([]GetActiveDevicesForUserRow, error)
 	GetDiscoveryCandidates(ctx context.Context, arg GetDiscoveryCandidatesParams) ([]GetDiscoveryCandidatesRow, error)
 	GetLikesYouList(ctx context.Context, arg GetLikesYouListParams) ([]GetLikesYouListRow, error)
-	GetMatchBetweenUsers(ctx context.Context, arg GetMatchBetweenUsersParams) (Match, error)
-	GetMatchByID(ctx context.Context, id uuid.UUID) (Match, error)
+	GetMatchBetweenUsers(ctx context.Context, arg GetMatchBetweenUsersParams) (GetMatchBetweenUsersRow, error)
+	GetMatchByID(ctx context.Context, id uuid.UUID) (GetMatchByIDRow, error)
+	GetMatchParticipants(ctx context.Context, id uuid.UUID) (GetMatchParticipantsRow, error)
+	GetMessageByClientMsgID(ctx context.Context, arg GetMessageByClientMsgIDParams) (GetMessageByClientMsgIDRow, error)
+	GetMessageByID(ctx context.Context, id int64) (GetMessageByIDRow, error)
 	GetPhotoByID(ctx context.Context, id uuid.UUID) (ProfilePhoto, error)
 	GetPhotosByUserID(ctx context.Context, userID uuid.UUID) ([]ProfilePhoto, error)
 	GetProfileByUserID(ctx context.Context, userID uuid.UUID) (GetProfileByUserIDRow, error)
 	GetProfileCardByUserID(ctx context.Context, userID uuid.UUID) (GetProfileCardByUserIDRow, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetSwipe(ctx context.Context, arg GetSwipeParams) (Swipe, error)
-	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
-	GetUserByPhone(ctx context.Context, phoneE164 string) (User, error)
+	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
+	GetUserByPhone(ctx context.Context, phoneE164 string) (GetUserByPhoneRow, error)
 	GetUserInterests(ctx context.Context, userID uuid.UUID) ([]string, error)
+	GetUserNotificationSettings(ctx context.Context, id uuid.UUID) (GetUserNotificationSettingsRow, error)
 	IsBlocked(ctx context.Context, arg IsBlockedParams) (bool, error)
+	ListMessagesAfter(ctx context.Context, arg ListMessagesAfterParams) ([]ListMessagesAfterRow, error)
+	ListMessagesBefore(ctx context.Context, arg ListMessagesBeforeParams) ([]ListMessagesBeforeRow, error)
 	ListUserMatches(ctx context.Context, arg ListUserMatchesParams) ([]ListUserMatchesRow, error)
+	MarkMessagesAsRead(ctx context.Context, arg MarkMessagesAsReadParams) error
 	PurgeDeletedUsers(ctx context.Context, deletedAt pgtype.Timestamptz) (int64, error)
 	RevokeAllUserTokens(ctx context.Context, userID uuid.UUID) error
 	RevokeRefreshToken(ctx context.Context, id uuid.UUID) error
 	RevokeTokenFamily(ctx context.Context, familyID uuid.UUID) error
 	SoftDeleteUser(ctx context.Context, id uuid.UUID) error
 	Unmatch(ctx context.Context, arg UnmatchParams) error
+	UpdateMatchLastMessageAt(ctx context.Context, arg UpdateMatchLastMessageAtParams) error
 	UpdatePhotoPosition(ctx context.Context, arg UpdatePhotoPositionParams) error
 	UpdateProfileCompleteness(ctx context.Context, arg UpdateProfileCompletenessParams) error
 	UpdateProfileLocation(ctx context.Context, arg UpdateProfileLocationParams) error
 	UpdateProfilePhoto(ctx context.Context, arg UpdateProfilePhotoParams) error
 	UpdateUserLastActive(ctx context.Context, id uuid.UUID) error
+	UpdateUserNotificationSettings(ctx context.Context, arg UpdateUserNotificationSettingsParams) error
 	UpsertDevice(ctx context.Context, arg UpsertDeviceParams) (Device, error)
 	UpsertProfile(ctx context.Context, arg UpsertProfileParams) (UpsertProfileRow, error)
 	UpsertSwipe(ctx context.Context, arg UpsertSwipeParams) error

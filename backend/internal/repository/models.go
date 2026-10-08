@@ -45,22 +45,26 @@ type Interest struct {
 }
 
 type Match struct {
-	ID          uuid.UUID          `json:"id"`
-	UserA       uuid.UUID          `json:"user_a"`
-	UserB       uuid.UUID          `json:"user_b"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UnmatchedAt pgtype.Timestamptz `json:"unmatched_at"`
+	ID            uuid.UUID          `json:"id"`
+	UserA         uuid.UUID          `json:"user_a"`
+	UserB         uuid.UUID          `json:"user_b"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UnmatchedAt   pgtype.Timestamptz `json:"unmatched_at"`
+	LastMessageAt pgtype.Timestamptz `json:"last_message_at"`
 }
 
 type Message struct {
-	ID        int64              `json:"id"`
-	MatchID   uuid.UUID          `json:"match_id"`
-	SenderID  uuid.UUID          `json:"sender_id"`
-	Body      pgtype.Text        `json:"body"`
-	Type      string             `json:"type"`
-	MediaID   pgtype.UUID        `json:"media_id"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	ReadAt    pgtype.Timestamptz `json:"read_at"`
+	ID          int64              `json:"id"`
+	MatchID     uuid.UUID          `json:"match_id"`
+	SenderID    uuid.UUID          `json:"sender_id"`
+	Body        pgtype.Text        `json:"body"`
+	Type        string             `json:"type"`
+	MediaID     pgtype.UUID        `json:"media_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ReadAt      pgtype.Timestamptz `json:"read_at"`
+	ClientMsgID pgtype.Text        `json:"client_msg_id"`
+	MediaUrl    pgtype.Text        `json:"media_url"`
+	Metadata    []byte             `json:"metadata"`
 }
 
 type Payment struct {
@@ -152,16 +156,17 @@ type Swipe struct {
 }
 
 type User struct {
-	ID           uuid.UUID          `json:"id"`
-	PhoneE164    string             `json:"phone_e164"`
-	Status       string             `json:"status"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	LastActiveAt pgtype.Timestamptz `json:"last_active_at"`
-	IsPremium    bool               `json:"is_premium"`
-	PremiumUntil pgtype.Timestamptz `json:"premium_until"`
-	Locale       string             `json:"locale"`
-	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
-	BoostUntil   pgtype.Timestamptz `json:"boost_until"`
+	ID                   uuid.UUID          `json:"id"`
+	PhoneE164            string             `json:"phone_e164"`
+	Status               string             `json:"status"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	LastActiveAt         pgtype.Timestamptz `json:"last_active_at"`
+	IsPremium            bool               `json:"is_premium"`
+	PremiumUntil         pgtype.Timestamptz `json:"premium_until"`
+	Locale               string             `json:"locale"`
+	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
+	BoostUntil           pgtype.Timestamptz `json:"boost_until"`
+	NotificationSettings []byte             `json:"notification_settings"`
 }
 
 type UserInterest struct {

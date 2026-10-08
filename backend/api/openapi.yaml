@@ -590,6 +590,240 @@ paths:
               schema:
                 $ref: '#/components/schemas/ReportResponse'
 
+  /v1/ws-ticket:
+    post:
+      summary: Request single-use WebSocket authentication ticket
+      description: Issues a 60-second ticket to connect to `/ws` without passing JWT in query string.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: WebSocket ticket generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WSTicketResponse'
+
+  /ws:
+    get:
+      summary: Realtime chat and presence WebSocket connection
+      description: |
+        Full-duplex WebSocket connection for real-time messaging, typing indicators, read receipts, and match alerts.
+        Must provide `?ticket=<token>` obtained from `POST /v1/ws-ticket`.
+      parameters:
+        - name: ticket
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Single-use ticket obtained from /v1/ws-ticket
+      responses:
+        '101':
+          description: Switching Protocols to WebSocket
+        '401':
+          description: Invalid or expired ticket
+
+  /v1/matches/{id}/messages:
+    get:
+      summary: List messages / replay history
+      description: Retrieves messages for a match with monotonic sequence ID replay (`after_id`).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: after_id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Monotonic message ID to replay newer messages from
+        - name: before_id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Monotonic message ID to page backwards in chat history
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Messages list returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessagesListResponse'
+
+    post:
+      summary: Send chat message (REST fallback)
+      description: Idempotent message sending with client_msg_id deduplication, content safety filtering, and offline push notification.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '201':
+          description: Message sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessage'
+
+  /v1/matches/{id}/read:
+    post:
+      summary: Mark match messages as read
+      description: Updates read receipts in DB and emits real-time read receipt to partner.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkReadRequest'
+      responses:
+        '200':
+          description: Read receipt acknowledged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  /v1/matches/{id}/media/upload-url:
+    post:
+      summary: Request presigned upload URL for voice notes or images
+      description: Generates upload URL for audio notes (<= 1MB, <= 60s) or chat images (<= 8MB).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MediaUploadRequest'
+      responses:
+        '201':
+          description: Presigned upload URL generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaUploadResponse'
+
+  /v1/devices:
+    post:
+      summary: Register FCM device push token
+      description: Associates an FCM token with current user for push notifications.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceRegisterRequest'
+      responses:
+        '200':
+          description: Device token registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  /v1/devices/{token}:
+    delete:
+      summary: Unregister FCM device push token
+      description: Disassociates an FCM token upon logout or app uninstall.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Device token unregistered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  /v1/me/notifications/settings:
+    get:
+      summary: Get user notification preferences
+      description: Retrieves push notification settings for match, message, and super-like events.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Notification settings returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSettingsResponse'
+
+    put:
+      summary: Update user notification preferences
+      description: Modifies per-category push notification preferences.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationSettings'
+      responses:
+        '200':
+          description: Notification settings updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSettings'
+
   /metrics:
     get:
       summary: Prometheus operational metrics
@@ -1290,4 +1524,140 @@ components:
       properties:
         reported:
           type: boolean
+
+    WSTicketResponse:
+      type: object
+      properties:
+        ticket:
+          type: string
+        expires_in_seconds:
+          type: integer
+          example: 60
+
+    SendMessageRequest:
+      type: object
+      required:
+        - body
+      properties:
+        body:
+          type: string
+          maxLength: 1000
+        type:
+          type: string
+          enum: [text, image, voice]
+          default: text
+        client_msg_id:
+          type: string
+        media_url:
+          type: string
+        metadata:
+          type: object
+
+    ChatMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        match_id:
+          type: string
+          format: uuid
+        sender_id:
+          type: string
+          format: uuid
+        body:
+          type: string
+        type:
+          type: string
+        client_msg_id:
+          type: string
+        media_url:
+          type: string
+        warning_flags:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    MessagesListResponse:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+        count:
+          type: integer
+
+    MarkReadRequest:
+      type: object
+      required:
+        - up_to_id
+      properties:
+        up_to_id:
+          type: integer
+
+    MediaUploadRequest:
+      type: object
+      required:
+        - media_type
+        - content_type
+        - size_bytes
+      properties:
+        media_type:
+          type: string
+          enum: [voice, image]
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+
+    MediaUploadResponse:
+      type: object
+      properties:
+        upload_url:
+          type: string
+        media_url:
+          type: string
+        media_type:
+          type: string
+
+    DeviceRegisterRequest:
+      type: object
+      required:
+        - fcm_token
+      properties:
+        fcm_token:
+          type: string
+        platform:
+          type: string
+          enum: [android, ios]
+          default: android
+
+    NotificationSettings:
+      type: object
+      properties:
+        new_match:
+          type: boolean
+          default: true
+        new_message:
+          type: boolean
+          default: true
+        super_like:
+          type: boolean
+          default: true
+
+    NotificationSettingsResponse:
+      type: object
+      properties:
+        settings:
+          $ref: '#/components/schemas/NotificationSettings'
+        locale:
+          type: string
+          default: en
 

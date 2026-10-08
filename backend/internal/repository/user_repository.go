@@ -27,7 +27,7 @@ func (r *pgUserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.U
 		}
 		return nil, err
 	}
-	return mapDBUserToDomain(u), nil
+	return mapUserFields(u.ID, u.PhoneE164, u.Status, u.CreatedAt, u.LastActiveAt, u.IsPremium, u.PremiumUntil, u.Locale, u.DeletedAt, u.BoostUntil), nil
 }
 
 func (r *pgUserRepository) GetByPhone(ctx context.Context, phone string) (*domain.User, error) {
@@ -38,7 +38,7 @@ func (r *pgUserRepository) GetByPhone(ctx context.Context, phone string) (*domai
 		}
 		return nil, err
 	}
-	return mapDBUserToDomain(u), nil
+	return mapUserFields(u.ID, u.PhoneE164, u.Status, u.CreatedAt, u.LastActiveAt, u.IsPremium, u.PremiumUntil, u.Locale, u.DeletedAt, u.BoostUntil), nil
 }
 
 func (r *pgUserRepository) Create(ctx context.Context, user *domain.User) error {
@@ -50,7 +50,7 @@ func (r *pgUserRepository) Create(ctx context.Context, user *domain.User) error 
 	if err != nil {
 		return err
 	}
-	created := mapDBUserToDomain(u)
+	created := mapUserFields(u.ID, u.PhoneE164, u.Status, u.CreatedAt, u.LastActiveAt, u.IsPremium, u.PremiumUntil, u.Locale, u.DeletedAt, u.BoostUntil)
 	*user = *created
 	return nil
 }
@@ -67,32 +67,32 @@ func (r *pgUserRepository) PurgeDeleted(ctx context.Context, before time.Time) (
 	return r.q.PurgeDeletedUsers(ctx, pgtype.Timestamptz{Time: before, Valid: true})
 }
 
-func mapDBUserToDomain(u User) *domain.User {
-	var premiumUntil *time.Time
-	if u.PremiumUntil.Valid {
-		t := u.PremiumUntil.Time
-		premiumUntil = &t
+func mapUserFields(id uuid.UUID, phone, status string, createdAt, lastActiveAt pgtype.Timestamptz, isPremium bool, premiumUntil pgtype.Timestamptz, locale string, deletedAt, boostUntil pgtype.Timestamptz) *domain.User {
+	var pUntil *time.Time
+	if premiumUntil.Valid {
+		t := premiumUntil.Time
+		pUntil = &t
 	}
-	var deletedAt *time.Time
-	if u.DeletedAt.Valid {
-		t := u.DeletedAt.Time
-		deletedAt = &t
+	var dAt *time.Time
+	if deletedAt.Valid {
+		t := deletedAt.Time
+		dAt = &t
 	}
-	var boostUntil *time.Time
-	if u.BoostUntil.Valid {
-		t := u.BoostUntil.Time
-		boostUntil = &t
+	var bUntil *time.Time
+	if boostUntil.Valid {
+		t := boostUntil.Time
+		bUntil = &t
 	}
 	return &domain.User{
-		ID:           u.ID,
-		PhoneE164:    u.PhoneE164,
-		Status:       domain.UserStatus(u.Status),
-		CreatedAt:    u.CreatedAt.Time,
-		LastActiveAt: u.LastActiveAt.Time,
-		IsPremium:    u.IsPremium,
-		PremiumUntil: premiumUntil,
-		Locale:       u.Locale,
-		DeletedAt:    deletedAt,
-		BoostUntil:   boostUntil,
+		ID:           id,
+		PhoneE164:    phone,
+		Status:       domain.UserStatus(status),
+		CreatedAt:    createdAt.Time,
+		LastActiveAt: lastActiveAt.Time,
+		IsPremium:    isPremium,
+		PremiumUntil: pUntil,
+		Locale:       locale,
+		DeletedAt:    dAt,
+		BoostUntil:   bUntil,
 	}
 }

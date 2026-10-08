@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -16,12 +17,14 @@ import (
 	"github.com/abshwabu/fikir/backend/internal/http/handler"
 	"github.com/abshwabu/fikir/backend/internal/http/middleware"
 	"github.com/abshwabu/fikir/backend/internal/platform/media"
+	"github.com/abshwabu/fikir/backend/internal/platform/safety"
 	"github.com/abshwabu/fikir/backend/internal/platform/sms"
 	"github.com/abshwabu/fikir/backend/internal/platform/token"
 	"github.com/abshwabu/fikir/backend/internal/queue"
 	"github.com/abshwabu/fikir/backend/internal/repository"
 	"github.com/abshwabu/fikir/backend/internal/service"
 	"github.com/abshwabu/fikir/backend/internal/storage"
+	"github.com/abshwabu/fikir/backend/internal/ws"
 )
 
 // ServerDependencies contains all components needed by the router
@@ -46,8 +49,14 @@ type ServerDependencies struct {
 	CardCache        cache.ProfileCardCache
 	DeckCache        cache.DeckCache
 	SwipeCache       cache.SwipeCache
+	ChatCache        cache.ChatCache
 	StorageClient    *storage.Storage
 	QueueClient      *queue.Client
+	ChatService      service.ChatService
+	Hub              *ws.Hub
+	ChatRepo         domain.ChatRepository
+	DeviceRepo       domain.DeviceRepository
+	NotifRepo        domain.NotificationRepository
 }
 
 // NewRouter constructs the Chi router with middleware and routes
@@ -93,6 +102,12 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 	cardCache := deps.CardCache
 	deckCache := deps.DeckCache
 	swipeCache := deps.SwipeCache
+	chatCache := deps.ChatCache
+	chatRepo := deps.ChatRepo
+	deviceRepo := deps.DeviceRepo
+	notifRepo := deps.NotifRepo
+	hub := deps.Hub
+	chatService := deps.ChatService
 	discoveryService := deps.DiscoveryService
 	swipeService := deps.SwipeService
 
@@ -119,6 +134,15 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 		if reportRepo == nil {
 			reportRepo = repository.NewReportRepository(queries)
 		}
+		if chatRepo == nil {
+			chatRepo = repository.NewChatRepository(queries)
+		}
+		if deviceRepo == nil {
+			deviceRepo = repository.NewDeviceRepository(queries)
+		}
+		if notifRepo == nil {
+			notifRepo = repository.NewNotificationRepository(queries)
+		}
 
 		if deps.Redis != nil {
 			if cardCache == nil {
@@ -129,6 +153,13 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 			}
 			if swipeCache == nil {
 				swipeCache = cache.NewSwipeCache(deps.Redis)
+			}
+			if chatCache == nil {
+				chatCache = cache.NewChatCache(deps.Redis)
+			}
+			if hub == nil {
+				hub = ws.NewHub("", deps.Redis, chatCache)
+				hub.Start(context.Background())
 			}
 		}
 
@@ -184,11 +215,33 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 				deps.QueueClient,
 			)
 		}
+
+		if chatService == nil && chatRepo != nil && blockRepo != nil && profileRepo != nil && deviceRepo != nil && notifRepo != nil && chatCache != nil && storageClient != nil && deps.Redis != nil && deps.Config != nil {
+			chatService = service.NewChatService(
+				deps.Config.Chat,
+				deps.Config.CDNBaseURL,
+				chatRepo,
+				blockRepo,
+				profileRepo,
+				deviceRepo,
+				notifRepo,
+				chatCache,
+				storageClient,
+				deps.QueueClient,
+				deps.Redis,
+				safety.NewSafetyAnalyzer(),
+			)
+		}
 	}
 
 	var authHandler *handler.AuthHandler
 	if authService != nil {
 		authHandler = handler.NewAuthHandler(authService)
+	}
+
+	var chatHandler *handler.ChatHandler
+	if chatService != nil && chatCache != nil && hub != nil {
+		chatHandler = handler.NewChatHandler(chatService, chatCache, hub)
 	}
 
 	var profileHandler *handler.ProfileHandler
@@ -255,8 +308,28 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 					authed.Post("/blocks", swipeHandler.Block)
 					authed.Post("/reports", swipeHandler.Report)
 				}
+
+				if chatHandler != nil {
+					authed.Post("/ws-ticket", chatHandler.RequestWSTicket)
+					authed.Post("/matches/{id}/messages", chatHandler.SendMessage)
+					authed.Get("/matches/{id}/messages", chatHandler.GetMessages)
+					authed.Post("/matches/{id}/read", chatHandler.MarkRead)
+					authed.Post("/matches/{id}/media/upload-url", chatHandler.RequestMediaUploadURL)
+					authed.Post("/devices", chatHandler.RegisterDevice)
+					authed.Delete("/devices/{token}", chatHandler.UnregisterDevice)
+					authed.Get("/me/notifications/settings", chatHandler.GetNotificationSettings)
+					authed.Put("/me/notifications/settings", chatHandler.UpdateNotificationSettings)
+				}
 			})
 		}
+
+		if chatHandler != nil {
+			v1.Get("/ws", chatHandler.ServeWS)
+		}
+	}
+
+	if chatHandler != nil {
+		r.Get("/ws", chatHandler.ServeWS)
 	}
 
 	// Mount under /v1 and /api/v1 for reverse-proxy compatibility
@@ -265,6 +338,9 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 		api.Get("/healthz", healthHandler.Healthz)
 		api.Get("/readyz", healthHandler.Readyz)
 		api.Handle("/metrics", promhttp.Handler())
+		if chatHandler != nil {
+			api.Get("/ws", chatHandler.ServeWS)
+		}
 		api.Route("/v1", registerV1Routes)
 	})
 

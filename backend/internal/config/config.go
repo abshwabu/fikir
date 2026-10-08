@@ -30,6 +30,9 @@ type Config struct {
 
 	Swipe     SwipeConfig
 	Discovery DiscoveryConfig
+
+	FCM  FCMConfig
+	Chat ChatConfig
 }
 
 type DatabaseConfig struct {
@@ -113,6 +116,18 @@ type DiscoveryConfig struct {
 	DeckTargetSize      int `envconfig:"DISCOVERY_DECK_TARGET_SIZE" default:"100" validate:"min=10"`
 	DeckRefillThreshold int `envconfig:"DISCOVERY_DECK_REFILL_THRESHOLD" default:"30" validate:"min=5"`
 	PageLimit           int `envconfig:"DISCOVERY_PAGE_LIMIT" default:"15" validate:"min=1"`
+}
+
+type FCMConfig struct {
+	CredentialsFile string `envconfig:"FCM_CREDENTIALS_FILE" default:""`
+	ProjectID       string `envconfig:"FCM_PROJECT_ID" default:""`
+	Enabled         bool   `envconfig:"FCM_ENABLED" default:"false"`
+}
+
+type ChatConfig struct {
+	MaxMessageLength  int           `envconfig:"CHAT_MAX_MESSAGE_LENGTH" default:"1000"`
+	RateLimitMessages int           `envconfig:"CHAT_RATE_LIMIT_MESSAGES" default:"30"`
+	RateLimitWindow   time.Duration `envconfig:"CHAT_RATE_LIMIT_WINDOW" default:"1m"`
 }
 
 // Load loads configuration from environment variables and validates it

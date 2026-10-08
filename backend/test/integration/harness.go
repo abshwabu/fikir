@@ -117,6 +117,7 @@ func (h *Harness) ApplyMigrations(ctx context.Context) error {
 		"000002_auth.up.sql",
 		"000003_media_verification.up.sql",
 		"000004_discovery_swipes.up.sql",
+		"000005_chat_notifications.up.sql",
 	}
 
 	for _, m := range migrations {
