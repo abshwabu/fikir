@@ -10,6 +10,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/abshwabu/fikir/backend/internal/cache"
+	"github.com/abshwabu/fikir/backend/internal/platform/metrics"
 )
 
 // Hub coordinates local WebSocket connections and Redis Pub/Sub multi-node fanout
@@ -95,6 +96,7 @@ func (h *Hub) Register(ctx context.Context, c *Client) {
 		h.clients[c.userID] = conns
 	}
 	conns[c] = true
+	metrics.WSActiveConnections.Inc()
 	h.clientsMu.Unlock()
 
 	// Update presence in Redis cluster
@@ -113,6 +115,7 @@ func (h *Hub) Unregister(ctx context.Context, c *Client) {
 	h.clientsMu.Lock()
 	if conns, ok := h.clients[c.userID]; ok {
 		delete(conns, c)
+		metrics.WSActiveConnections.Dec()
 		if len(conns) == 0 {
 			delete(h.clients, c.userID)
 		}

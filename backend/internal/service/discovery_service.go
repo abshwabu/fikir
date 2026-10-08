@@ -17,6 +17,7 @@ import (
 type DiscoveryService interface {
 	GetDeck(ctx context.Context, userID uuid.UUID, limit int, acceptHeader string) ([]domain.ProfileCard, error)
 	RefillDeck(ctx context.Context, userID uuid.UUID) error
+	WarmCityCaches(ctx context.Context, cities []string) error
 }
 
 type discoveryService struct {
@@ -225,4 +226,59 @@ func mapKeysToSlice(m map[uuid.UUID]bool) []uuid.UUID {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// WarmCityCaches pre-populates card caches for popular urban centers
+func (s *discoveryService) WarmCityCaches(ctx context.Context, cities []string) error {
+	if len(cities) == 0 {
+		cities = []string{"Addis Ababa", "Hawassa", "Bahir Dar", "Dire Dawa", "Adama"}
+	}
+
+	cityCoords := map[string][2]float64{
+		"Addis Ababa": {9.010793, 38.761252},
+		"Hawassa":     {7.06205, 38.47635},
+		"Bahir Dar":   {11.59364, 37.39077},
+		"Dire Dawa":   {9.60087, 41.85014},
+		"Adama":       {8.54139, 39.26889},
+	}
+
+	for _, city := range cities {
+		coords, ok := cityCoords[city]
+		if !ok {
+			coords = [2]float64{9.010793, 38.761252}
+		}
+
+		params := domain.DiscoveryParams{
+			UserID:       uuid.Nil,
+			Gender:       "",
+			InterestedIn: []string{"male", "female"},
+			Latitude:     coords[0],
+			Longitude:    coords[1],
+			RadiusMeters: 50000.0,
+			Limit:        50,
+		}
+
+		candidates, err := s.discoveryRepo.GetCandidates(ctx, params)
+		if err != nil || len(candidates) == 0 {
+			continue
+		}
+
+		candIDs := make([]uuid.UUID, len(candidates))
+		for i, c := range candidates {
+			candIDs[i] = c.UserID
+		}
+
+		cardMap, err := s.discoveryRepo.GetProfileCards(ctx, candIDs, "")
+		if err != nil {
+			continue
+		}
+
+		for _, card := range cardMap {
+			if card != nil {
+				_ = s.cardCache.Set(ctx, card)
+			}
+		}
+	}
+
+	return nil
 }

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -73,6 +74,15 @@ func (h *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	p, err := h.profileService.GetProfile(r.Context(), userID)
 	if err != nil {
 		response.Error(w, err)
+		return
+	}
+
+	etag := fmt.Sprintf(`W/"%s-%d"`, p.UserID.String(), p.UpdatedAt.UnixNano())
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "private, max-age=60, stale-while-revalidate=120")
+
+	if match := r.Header.Get("If-None-Match"); match != "" && match == etag {
+		w.WriteHeader(http.StatusNotModified)
 		return
 	}
 

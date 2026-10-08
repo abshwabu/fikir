@@ -72,6 +72,8 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 	// Base middleware
 	r.Use(middleware.RequestID)
 	r.Use(chimw.RealIP)
+	r.Use(middleware.OpenTelemetryTracing())
+	r.Use(middleware.PrometheusMetrics())
 	r.Use(middleware.StructuredLogger(deps.Logger))
 	r.Use(middleware.Recoverer(deps.Logger))
 	r.Use(middleware.CORS(deps.Config.CORS.Origins))

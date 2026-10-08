@@ -14,6 +14,8 @@ import (
 	"github.com/abshwabu/fikir/backend/internal/config"
 	apphttp "github.com/abshwabu/fikir/backend/internal/http"
 	"github.com/abshwabu/fikir/backend/internal/platform/logger"
+	"github.com/abshwabu/fikir/backend/internal/platform/metrics"
+	"github.com/abshwabu/fikir/backend/internal/platform/tracing"
 	"github.com/abshwabu/fikir/backend/internal/queue"
 )
 
@@ -28,6 +30,12 @@ func main() {
 	log := logger.New(cfg.AppEnv, cfg.LogLevel)
 	log.Info().Str("env", cfg.AppEnv).Str("port", cfg.AppPort).Msg("Starting Fikir API service")
 
+	// Initialize OpenTelemetry tracer
+	_, otelCleanup := tracing.InitTracer("fikir-api")
+	defer func() {
+		_ = otelCleanup(context.Background())
+	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -38,12 +46,17 @@ func main() {
 	}
 	pgConfig.MaxConns = cfg.Database.MaxConns
 	pgConfig.MinConns = cfg.Database.MinConns
+	pgConfig.MaxConnIdleTime = 5 * time.Minute
+	pgConfig.MaxConnLifetime = 30 * time.Minute
 
 	dbPool, err := pgxpool.NewWithConfig(ctx, pgConfig)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to connect to database pool")
 	}
 	defer dbPool.Close()
+
+	// Start DBPool metrics sampler
+	metrics.StartDBPoolMetricsCollector(ctx, dbPool, 5*time.Second)
 
 	// 4. Connect to Redis
 	rdb := redis.NewClient(&redis.Options{

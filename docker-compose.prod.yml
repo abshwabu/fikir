@@ -1,99 +1,268 @@
 services:
   postgres:
+    image: postgis/postgis:16-3.4
     restart: always
-    deploy:
-      resources:
-        limits:
-          cpus: "2.0"
-          memory: 2048M
-        reservations:
-          cpus: "0.50"
-          memory: 512M
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    command: >
+      postgres
+      -c shared_buffers=1GB
+      -c work_mem=32MB
+      -c maintenance_work_mem=256MB
+      -c effective_cache_size=3GB
+      -c max_connections=100
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/docker/postgres/01-init-extensions.sql:/docker-entrypoint-initdb.d/01-init-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.22.1
+    restart: always
+    environment:
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: postgres
+      DB_NAME: ${DB_NAME}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 1000
+      DEFAULT_POOL_SIZE: 25
+      MIN_POOL_SIZE: 5
+      RESERVE_POOL_SIZE: 5
+    volumes:
+      - ./deploy/docker/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./deploy/docker/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    ports:
+      - "6432:6432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
 
   redis:
+    image: redis:7-alpine
     restart: always
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 512M
-        reservations:
-          cpus: "0.10"
-          memory: 128M
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
 
   minio:
+    image: minio/minio:latest
     restart: always
-    deploy:
-      resources:
-        limits:
-          cpus: "1.5"
-          memory: 1024M
-        reservations:
-          cpus: "0.25"
-          memory: 256M
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  minio-init:
+    image: minio/minio:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      until /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do
+        sleep 1;
+      done;
+      /usr/bin/mc mb --ignore-existing myminio/${MINIO_BUCKET_ORIGINAL:-fikir-media-original};
+      /usr/bin/mc mb --ignore-existing myminio/${MINIO_BUCKET_PUBLIC:-fikir-media-public};
+      /usr/bin/mc anonymous set download myminio/${MINIO_BUCKET_PUBLIC:-fikir-media-public};
+      exit 0;
+      "
+    restart: "no"
+
+  migrate:
+    image: migrate/migrate:v4.17.1
+    volumes:
+      - ./backend/migrations:/migrations:ro
+      - ./deploy/docker/migrate/entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/entrypoint.sh"]
+    command: ["up"]
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_SSLMODE: disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   api:
+    image: ghcr.io/${GITHUB_REPOSITORY:-abshwabu/fikir}/fikir-api:latest
+    build:
+      context: ./backend
+      dockerfile: ../deploy/docker/Dockerfile
+      target: runner
     restart: always
     environment:
       APP_ENV: production
-    deploy:
-      resources:
-        limits:
-          cpus: "2.0"
-          memory: 1024M
-        reservations:
-          cpus: "0.25"
-          memory: 256M
+      APP_PORT: 8080
+      LOG_LEVEL: info
+      DB_HOST: pgbouncer
+      DB_PORT: 6432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MINIO_ENDPOINT: minio:9000
+      JWT_SECRET: ${JWT_SECRET}
+      CHAPA_SECRET_KEY: ${CHAPA_SECRET_KEY}
+      CHAPA_WEBHOOK_SECRET: ${CHAPA_WEBHOOK_SECRET}
+    depends_on:
+      pgbouncer:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
 
   worker:
+    image: ghcr.io/${GITHUB_REPOSITORY:-abshwabu/fikir}/fikir-worker:latest
+    build:
+      context: ./backend
+      dockerfile: ../deploy/docker/Dockerfile
+      target: runner
     restart: always
+    command: ["/app/worker"]
     environment:
       APP_ENV: production
-    deploy:
-      resources:
-        limits:
-          cpus: "2.0"
-          memory: 1024M
-        reservations:
-          cpus: "0.25"
-          memory: 256M
+      LOG_LEVEL: info
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MINIO_ENDPOINT: minio:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   nginx:
+    image: nginx:alpine
     restart: always
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - nginx_cache:/var/cache/nginx
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
     ports:
       - "80:80"
       - "443:443"
-    volumes:
-      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./deploy/nginx/conf.d/prod.conf:/etc/nginx/conf.d/default.conf:ro
-      - certs_data:/etc/letsencrypt
-      - certbot_challenge:/var/www/certbot
-      - nginx_cache:/var/cache/nginx
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 512M
-        reservations:
-          cpus: "0.10"
-          memory: 64M
+    depends_on:
+      api:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
 
   certbot:
     image: certbot/certbot:latest
-    profiles:
-      - certbot
+    restart: unless-stopped
     volumes:
-      - certs_data:/etc/letsencrypt
-      - certbot_challenge:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+  db-backup:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      BACKUP_RETENTION_DAYS: 30
+    volumes:
+      - ./deploy/scripts/backup_postgres.sh:/backup.sh:ro
+      - backup_data:/backups
     entrypoint: >
       /bin/sh -c "
-      trap exit TERM;
+      chmod +x /backup.sh;
       while :; do
-        certbot renew --webroot -w /var/www/certbot;
-        sleep 12h & wait $${!};
+        /backup.sh;
+        sleep 24h & wait $${!};
       done;
       "
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
-  certs_data:
-  certbot_challenge:
+  postgres_data:
+  redis_data:
+  minio_data:
+  nginx_cache:
+  certbot_conf:
+  certbot_www:
+  backup_data:
