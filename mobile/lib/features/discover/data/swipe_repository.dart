@@ -79,12 +79,22 @@ class SwipeRepositoryImpl implements SwipeRepository {
     return const SwipeResult(matched: false);
   }
 
+  bool _isValidUuid(String str) {
+    final uuidRegex = RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+    return uuidRegex.hasMatch(str);
+  }
+
   Future<void> _sendSwipe(
     String swipeId,
     String targetUserId,
     SwipeDirection direction,
     DiscoveryProfileCard? candidate,
   ) async {
+    if (!_isValidUuid(targetUserId)) {
+      await _db.markSwipeSynced(swipeId);
+      return;
+    }
+
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '/v1/swipes',
@@ -130,6 +140,11 @@ class SwipeRepositoryImpl implements SwipeRepository {
     var syncedCount = 0;
 
     for (final item in pending) {
+      if (!_isValidUuid(item.targetUserId)) {
+        await _db.markSwipeSynced(item.id);
+        continue;
+      }
+
       try {
         final response = await _dio.post<Map<String, dynamic>>(
           '/v1/swipes',
