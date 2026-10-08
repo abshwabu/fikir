@@ -17,6 +17,8 @@ import (
 	"github.com/abshwabu/fikir/backend/internal/http/handler"
 	"github.com/abshwabu/fikir/backend/internal/http/middleware"
 	"github.com/abshwabu/fikir/backend/internal/platform/media"
+	paymentplatform "github.com/abshwabu/fikir/backend/internal/platform/payment"
+	"github.com/abshwabu/fikir/backend/internal/platform/push"
 	"github.com/abshwabu/fikir/backend/internal/platform/safety"
 	"github.com/abshwabu/fikir/backend/internal/platform/sms"
 	"github.com/abshwabu/fikir/backend/internal/platform/token"
@@ -57,6 +59,10 @@ type ServerDependencies struct {
 	ChatRepo         domain.ChatRepository
 	DeviceRepo       domain.DeviceRepository
 	NotifRepo        domain.NotificationRepository
+	PaymentRepo       domain.PaymentRepository
+	ModerationRepo    domain.ModerationRepository
+	PaymentService    service.PaymentService
+	ModerationService service.ModerationService
 }
 
 // NewRouter constructs the Chi router with middleware and routes
@@ -110,6 +116,10 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 	chatService := deps.ChatService
 	discoveryService := deps.DiscoveryService
 	swipeService := deps.SwipeService
+	paymentRepo := deps.PaymentRepo
+	moderationRepo := deps.ModerationRepo
+	paymentService := deps.PaymentService
+	moderationService := deps.ModerationService
 
 	if deps.DB != nil {
 		queries := repository.New(deps.DB)
@@ -142,6 +152,12 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 		}
 		if notifRepo == nil {
 			notifRepo = repository.NewNotificationRepository(queries)
+		}
+		if paymentRepo == nil {
+			paymentRepo = repository.NewPaymentRepository(deps.DB)
+		}
+		if moderationRepo == nil {
+			moderationRepo = repository.NewModerationRepository(deps.DB)
 		}
 
 		if deps.Redis != nil {
@@ -232,6 +248,41 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 				safety.NewSafetyAnalyzer(),
 			)
 		}
+
+		if paymentService == nil && paymentRepo != nil {
+			var notifier push.PushNotifier
+			if deps.Config != nil {
+				notifier = push.NewNotifier(context.Background(), deps.Config.FCM)
+			} else {
+				notifier = push.NewConsolePushNotifier()
+			}
+
+			chapaCfg := paymentplatform.ChapaConfig{}
+			if deps.Config != nil {
+				chapaCfg.BaseURL = deps.Config.Chapa.BaseURL
+				chapaCfg.SecretKey = deps.Config.Chapa.SecretKey
+				chapaCfg.WebhookSecret = deps.Config.Chapa.WebhookSecret
+			}
+			chapaProv := paymentplatform.NewChapaProvider(chapaCfg)
+			telebirrProv := paymentplatform.NewTelebirrProvider(paymentplatform.TelebirrConfig{})
+			googlePlayProv := paymentplatform.NewGooglePlayProvider(paymentplatform.GooglePlayConfig{})
+			providers := map[string]paymentplatform.PaymentProvider{
+				"chapa":       chapaProv,
+				"telebirr":    telebirrProv,
+				"google_play": googlePlayProv,
+			}
+			paymentService = service.NewPaymentService(paymentRepo, userRepo, deviceRepo, providers, notifier)
+		}
+
+		if moderationService == nil && moderationRepo != nil {
+			var notifier push.PushNotifier
+			if deps.Config != nil {
+				notifier = push.NewNotifier(context.Background(), deps.Config.FCM)
+			} else {
+				notifier = push.NewConsolePushNotifier()
+			}
+			moderationService = service.NewModerationService(moderationRepo, userRepo, profileRepo, paymentRepo, cardCache, notifier)
+		}
 	}
 
 	var authHandler *handler.AuthHandler
@@ -262,6 +313,24 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 	var swipeHandler *handler.SwipeHandler
 	if swipeService != nil {
 		swipeHandler = handler.NewSwipeHandler(swipeService)
+	}
+
+	var paymentHandler *handler.PaymentHandler
+	if paymentService != nil {
+		paymentHandler = handler.NewPaymentHandler(paymentService, moderationService)
+	}
+
+	var adminHandler *handler.AdminHandler
+	if moderationService != nil && paymentService != nil {
+		adminUser := "admin"
+		adminPass := "admin"
+		if deps.Config != nil && deps.Config.Admin.Username != "" {
+			adminUser = deps.Config.Admin.Username
+		}
+		if deps.Config != nil && deps.Config.Admin.Password != "" {
+			adminPass = deps.Config.Admin.Password
+		}
+		adminHandler = handler.NewAdminHandler(moderationService, paymentService, adminUser, adminPass)
 	}
 
 	registerV1Routes := func(v1 chi.Router) {
@@ -320,7 +389,19 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 					authed.Get("/me/notifications/settings", chatHandler.GetNotificationSettings)
 					authed.Put("/me/notifications/settings", chatHandler.UpdateNotificationSettings)
 				}
+
+				if paymentHandler != nil {
+					authed.Post("/payments/checkout", paymentHandler.InitiateCheckout)
+					authed.Get("/payments/{reference}", paymentHandler.GetPaymentStatus)
+					authed.Get("/me/subscription", paymentHandler.GetUserSubscription)
+					authed.Get("/me/export", paymentHandler.ExportUserData)
+				}
 			})
+		}
+
+		if paymentHandler != nil {
+			v1.Get("/plans", paymentHandler.GetPlans)
+			v1.Post("/webhooks/{provider}", paymentHandler.HandleWebhook)
 		}
 
 		if chatHandler != nil {
@@ -332,6 +413,29 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 		r.Get("/ws", chatHandler.ServeWS)
 	}
 
+	if adminHandler != nil {
+		adminRoutes := func(adm chi.Router) {
+			adm.Use(adminHandler.BasicAuthMiddleware)
+			adm.Get("/", adminHandler.ServeDashboard)
+			adm.Route("/api", func(api chi.Router) {
+				api.Get("/photos", adminHandler.GetPendingPhotos)
+				api.Post("/photos/{id}/approve", adminHandler.ApprovePhoto)
+				api.Post("/photos/{id}/reject", adminHandler.RejectPhoto)
+				api.Get("/verifications", adminHandler.GetPendingVerifications)
+				api.Post("/verifications/{id}/approve", adminHandler.ApproveVerification)
+				api.Post("/verifications/{id}/reject", adminHandler.RejectVerification)
+				api.Get("/reports", adminHandler.GetPendingReports)
+				api.Post("/reports/{id}/resolve", adminHandler.ResolveReport)
+				api.Post("/users/{id}/warn", adminHandler.WarnUser)
+				api.Post("/users/{id}/ban", adminHandler.BanUser)
+				api.Post("/users/{id}/shadow-ban", adminHandler.ShadowBanUser)
+				api.Get("/audit-logs", adminHandler.GetAuditLogs)
+				api.Get("/payments", adminHandler.GetPaymentsLedger)
+			})
+		}
+		r.Route("/admin", adminRoutes)
+	}
+
 	// Mount under /v1 and /api/v1 for reverse-proxy compatibility
 	r.Route("/v1", registerV1Routes)
 	r.Route("/api", func(api chi.Router) {
@@ -340,6 +444,12 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 		api.Handle("/metrics", promhttp.Handler())
 		if chatHandler != nil {
 			api.Get("/ws", chatHandler.ServeWS)
+		}
+		if adminHandler != nil {
+			api.Route("/admin", func(adm chi.Router) {
+				adm.Use(adminHandler.BasicAuthMiddleware)
+				adm.Get("/", adminHandler.ServeDashboard)
+			})
 		}
 		api.Route("/v1", registerV1Routes)
 	})

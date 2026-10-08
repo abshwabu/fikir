@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:fikir/core/constants/ethiopian_data.dart';
 import 'package:fikir/core/database/app_database.dart';
 import 'package:fikir/core/design/colors.dart';
+import 'package:fikir/core/design/widgets/fikir_card.dart';
 import 'package:fikir/core/design/widgets/gradient_button.dart';
 import 'package:fikir/core/utils/image_compressor.dart';
 import 'package:fikir/features/profile/data/profile_repository.dart';
@@ -34,6 +35,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   late TextEditingController _heightController;
 
   String? _selectedReligion;
+  String? _selectedLookingFor = 'Marriage (ጋብቻ)';
+  bool _familyOriented = true;
+  bool _diasporaMode = false;
   final Set<String> _selectedLanguages = {};
   final Set<String> _selectedInterests = {};
   final List<String> _photos = [];
@@ -313,6 +317,54 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   prefixIcon: Icon(Icons.height_rounded),
                 ),
                 onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 20),
+
+              // Looking For (Relationship Goals)
+              const Text(
+                'Looking For (ግንኙነት)',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                initialValue: _selectedLookingFor,
+                decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
+                items: const [
+                  DropdownMenuItem(value: 'Marriage (ጋብቻ)', child: Text('💍 Marriage (ጋብቻ)')),
+                  DropdownMenuItem(value: 'Serious Relationship (ዘላቂ ግንኙነት)', child: Text('❤️ Serious Relationship (ዘላቂ ግንኙነት)')),
+                  DropdownMenuItem(value: 'Casual / Friends (ጓደኝነት)', child: Text('☕ Casual / Friends (ጓደኝነት)')),
+                  DropdownMenuItem(value: 'Still Figuring Out (እያሰብኩበት ነው)', child: Text('🤔 Still Figuring Out (እያሰብኩበት ነው)')),
+                ],
+                onChanged: (val) => setState(() => _selectedLookingFor = val),
+              ),
+              const SizedBox(height: 16),
+
+              // Cultural Badges: Family-Oriented & Diaspora Mode
+              FikirCard(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      secondary: const Icon(Icons.people_alt_outlined, color: FikirColors.primaryCoral),
+                      title: const Text('Family-Oriented (ቤተሰብ ወዳድ)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                      subtitle: const Text('Display family-focused badge on profile', style: TextStyle(fontSize: 12)),
+                      value: _familyOriented,
+                      activeThumbColor: FikirColors.primaryCoral,
+                      onChanged: (val) => setState(() => _familyOriented = val),
+                    ),
+                    const Divider(),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      secondary: const Icon(Icons.flight_takeoff_rounded, color: Colors.blueAccent),
+                      title: const Text('Ethiopian Diaspora Mode', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                      subtitle: const Text('Connect with Ethiopians globally', style: TextStyle(fontSize: 12)),
+                      value: _diasporaMode,
+                      activeThumbColor: Colors.blueAccent,
+                      onChanged: (val) => setState(() => _diasporaMode = val),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 20),
 

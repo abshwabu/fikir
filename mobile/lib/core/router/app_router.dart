@@ -10,9 +10,11 @@ import 'package:fikir/features/likes/presentation/likes_screen.dart';
 import 'package:fikir/features/matches/presentation/matches_screen.dart';
 import 'package:fikir/features/onboarding/data/onboarding_repository.dart';
 import 'package:fikir/features/onboarding/presentation/onboarding_flow_screen.dart';
+import 'package:fikir/features/premium/presentation/premium_screen.dart';
 import 'package:fikir/features/profile/presentation/edit_profile_screen.dart';
 import 'package:fikir/features/profile/presentation/profile_screen.dart';
 import 'package:fikir/features/profile/presentation/verification_screen.dart';
+import 'package:fikir/features/settings/presentation/privacy_policy_screen.dart';
 import 'package:fikir/features/settings/presentation/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -148,6 +150,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/premium',
+        builder: (context, state) {
+          final tier = (state.extra as String?) ?? 'gold';
+          return PremiumScreen(initialTier: tier);
+        },
+      ),
+      GoRoute(
+        path: '/privacy',
+        builder: (context, state) => const PrivacyPolicyScreen(),
       ),
     ],
   );

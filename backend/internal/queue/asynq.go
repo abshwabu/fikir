@@ -28,6 +28,8 @@ const (
 	TypeMatchNotification = "notification:match"
 	TypeChatMessageNotification = "notification:chat_message"
 	TypeSuperLikeNotification   = "notification:super_like"
+	TypePaymentReconcile        = "payment:reconcile"
+	TypeSubscriptionExpiry      = "subscription:expiry"
 )
 
 type SendSMSPayload struct {

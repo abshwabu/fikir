@@ -33,6 +33,20 @@ type Config struct {
 
 	FCM  FCMConfig
 	Chat ChatConfig
+
+	Chapa ChapaConfig
+	Admin AdminConfig
+}
+
+type ChapaConfig struct {
+	BaseURL       string `envconfig:"CHAPA_BASE_URL" default:"https://api.chapa.co/v1"`
+	SecretKey     string `envconfig:"CHAPA_SECRET_KEY" default:""`
+	WebhookSecret string `envconfig:"CHAPA_WEBHOOK_SECRET" default:""`
+}
+
+type AdminConfig struct {
+	Username string `envconfig:"ADMIN_USERNAME" default:"admin"`
+	Password string `envconfig:"ADMIN_PASSWORD" default:"admin"`
 }
 
 type DatabaseConfig struct {

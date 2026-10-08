@@ -29,4 +29,6 @@ type Container struct {
 	Media     MediaService
 	Discovery DiscoveryService
 	Swipe     SwipeService
+	Payment    PaymentService
+	Moderation ModerationService
 }

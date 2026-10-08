@@ -19,6 +19,7 @@ import (
 	"github.com/abshwabu/fikir/backend/internal/domain"
 	"github.com/abshwabu/fikir/backend/internal/platform/logger"
 	"github.com/abshwabu/fikir/backend/internal/platform/media"
+	paymentplatform "github.com/abshwabu/fikir/backend/internal/platform/payment"
 	"github.com/abshwabu/fikir/backend/internal/platform/push"
 	"github.com/abshwabu/fikir/backend/internal/platform/sms"
 	"github.com/abshwabu/fikir/backend/internal/queue"
@@ -296,6 +297,73 @@ func main() {
 		log.Info().Str("type", t.Type()).Msg("Sending notification task placeholder")
 		return nil
 	})
+
+	// Payment Reconciliation & Expiry worker components
+	paymentRepo := repository.NewPaymentRepository(dbPool)
+	chapaProv := paymentplatform.NewChapaProvider(paymentplatform.ChapaConfig{
+		BaseURL:       cfg.Chapa.BaseURL,
+		SecretKey:     cfg.Chapa.SecretKey,
+		WebhookSecret: cfg.Chapa.WebhookSecret,
+	})
+	telebirrProv := paymentplatform.NewTelebirrProvider(paymentplatform.TelebirrConfig{})
+	googlePlayProv := paymentplatform.NewGooglePlayProvider(paymentplatform.GooglePlayConfig{})
+	paymentProviders := map[string]paymentplatform.PaymentProvider{
+		"chapa":       chapaProv,
+		"telebirr":    telebirrProv,
+		"google_play": googlePlayProv,
+	}
+	paymentService := service.NewPaymentService(paymentRepo, userRepo, deviceRepo, paymentProviders, pushNotifier)
+
+	mux.HandleFunc(queue.TypePaymentReconcile, func(ctx context.Context, t *asynq.Task) error {
+		log.Info().Msg("Executing payment reconciliation task")
+		count, err := paymentService.ReconcilePendingPayments(ctx)
+		if err != nil {
+			log.Error().Err(err).Msg("Payment reconciliation failed")
+			return err
+		}
+		log.Info().Int("reconciled", count).Msg("Reconciliation complete")
+		return nil
+	})
+
+	mux.HandleFunc(queue.TypeSubscriptionExpiry, func(ctx context.Context, t *asynq.Task) error {
+		log.Info().Msg("Executing subscription expiry and reminder task")
+		count, err := paymentService.ProcessExpiringSubscriptions(ctx)
+		if err != nil {
+			log.Error().Err(err).Msg("Subscription expiry processing failed")
+			return err
+		}
+		log.Info().Int("reminders_sent", count).Msg("Subscription expiry check complete")
+		return nil
+	})
+
+	// Run periodic background reconciliation and expiry ticker
+	go func() {
+		reconcileTicker := time.NewTicker(10 * time.Minute)
+		expiryTicker := time.NewTicker(30 * time.Minute)
+		defer reconcileTicker.Stop()
+		defer expiryTicker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-reconcileTicker.C:
+				count, err := paymentService.ReconcilePendingPayments(ctx)
+				if err != nil {
+					log.Error().Err(err).Msg("Background payment reconciliation failed")
+				} else if count > 0 {
+					log.Info().Int("reconciled", count).Msg("Background payment reconciliation succeeded")
+				}
+			case <-expiryTicker.C:
+				count, err := paymentService.ProcessExpiringSubscriptions(ctx)
+				if err != nil {
+					log.Error().Err(err).Msg("Background subscription expiry processing failed")
+				} else if count > 0 {
+					log.Info().Int("reminded", count).Msg("Background subscription expiry reminders dispatched")
+				}
+			}
+		}
+	}()
 
 	// Run asynq server in background
 	go func() {

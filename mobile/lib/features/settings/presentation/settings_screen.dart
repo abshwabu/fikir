@@ -8,6 +8,7 @@ import 'package:fikir/features/profile/presentation/profile_screen.dart';
 import 'package:fikir/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 final dataSaverModeProvider = StateProvider<bool>((ref) {
   final prefs = ref.watch(preferencesServiceProvider);
@@ -37,6 +38,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
+          // 0. Fikir Premium
+          FikirCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.star_rounded, color: Colors.amber, size: 28),
+                        SizedBox(width: 8),
+                        Text(
+                          'Fikir Premium',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                        ),
+                      ],
+                    ),
+                    TextButton(
+                      onPressed: () => context.push('/premium'),
+                      child: const Text('Upgrade', style: TextStyle(color: FikirColors.primaryCoral, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Unlimited likes, rewind, see who likes you, and Ethiopian diaspora mode.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
           // 1. Discovery Preferences
           FikirCard(
             padding: const EdgeInsets.all(16),
@@ -281,6 +317,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   subtitle: Text('${prefs.getBlockedUsers().length} users blocked'),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => _showBlockedUsersSheet(context),
+                ),
+                const Divider(),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.privacy_tip_outlined, color: Colors.green),
+                  title: const Text('Privacy & Legal Guard'),
+                  subtitle: const Text('Proclamation 1321/2024 compliance & data export'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => context.push('/privacy'),
                 ),
               ],
             ),
