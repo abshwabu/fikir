@@ -1,0 +1,278 @@
+{
+  "@@locale": "en",
+  "appName": "Fikir",
+  "tagline": "Find your Ethiopian love",
+  "navDiscover": "Discover",
+  "navLikes": "Likes",
+  "navMatches": "Matches",
+  "navChat": "Chat",
+  "navProfile": "Profile",
+  "like": "Like",
+  "pass": "Pass",
+  "superLike": "Super Like",
+  "rewind": "Rewind",
+  "save": "Save",
+  "cancel": "Cancel",
+  "continueAction": "Continue",
+  "back": "Back",
+  "retry": "Retry",
+  "delete": "Delete",
+  "logout": "Log Out",
+  "loginTitle": "Welcome to Fikir",
+  "loginSubtitle": "Enter your Ethiopian phone number to continue",
+  "phonePlaceholder": "09xxxxxxxx or 07xxxxxxxx",
+  "sendOtp": "Send Code",
+  "verifyOtp": "Verify Code",
+  "enterCode": "Enter the 6-digit code sent to your phone",
+  "resendCode": "Resend Code",
+  "invalidPhone": "Please enter a valid Ethiopian mobile number (09... or 07...)",
+  "invalidOtp": "Please enter a valid 6-digit code",
+  "noMoreProfiles": "No more profiles nearby",
+  "noMoreProfilesDesc": "Expand your distance or age preferences to meet more people.",
+  "expandPreferences": "Expand Preferences",
+  "itsAMatch": "It's a Match! 🎉",
+  "startChat": "Send a Message",
+  "editProfile": "Edit Profile",
+  "aboutMe": "About Me",
+  "interests": "Interests",
+  "languages": "Languages",
+  "city": "City",
+  "birthdate": "Birthdate",
+  "selectBirthdate": "Select Birthdate",
+  "useEthiopianCalendar": "Use Ethiopian Calendar",
+  "useEthiopicNumerals": "Use Ethiopic Numerals",
+  "settings": "Settings",
+  "language": "Language",
+  "theme": "Theme",
+  "darkMode": "Dark",
+  "lightMode": "Light",
+  "systemMode": "System",
+  "offlineBanner": "No Internet Connection - Showing cached content",
+  "connecting": "Connecting...",
+  "connectionError": "Network connection error",
+  "timeoutError": "Connection timed out. Please try again.",
+  "termsNotice": "By continuing, you agree to our Terms. Learn how we process your data in our Privacy Policy.",
+  "termsOfService": "Terms of Service",
+  "privacyPolicy": "Privacy Policy",
+  "continueWithPhone": "Continue with Phone",
+  "chooseLanguage": "Choose Language",
+  "myNumberIs": "My Number Is",
+  "phoneNotice": "We will send an SMS with a 6-digit verification code. Standard carrier rates may apply.",
+  "verificationCode": "Verification Code",
+  "codeSentTo": "Enter the 6-digit code sent to {phone}",
+  "@codeSentTo": {
+    "placeholders": {
+      "phone": {
+        "type": "String"
+      }
+    }
+  },
+  "attemptsRemaining": "Attempts remaining: {count}",
+  "@attemptsRemaining": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tooManyAttempts": "Too many failed attempts. Please request a new code.",
+  "onboardingProgress": "Step {current} of {total}",
+  "@onboardingProgress": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "whatsYourName": "What's your name?",
+  "nameNotice": "This is how it will appear on your profile.",
+  "firstName": "First name",
+  "enterNameError": "Please enter your name",
+  "whensYourBirthday": "When's your birthday?",
+  "birthdayNotice": "Your age will be public. You must be at least 18 years old to join Fikir.",
+  "underageError": "You must be at least 18 years old to use Fikir.",
+  "iAmA": "I am a...",
+  "woman": "Woman",
+  "man": "Man",
+  "otherGender": "More",
+  "interestedIn": "Interested in...",
+  "women": "Women",
+  "men": "Men",
+  "everyone": "Everyone",
+  "addPhotosTitle": "Add your photos",
+  "addPhotosSubtitle": "Add at least 1 photo to continue. Drag to reorder. Crop is 4:5.",
+  "addPhoto": "Add Photo",
+  "mainPhoto": "Main",
+  "minPhotosError": "Please add at least 1 photo to continue",
+  "compressingImage": "Compressing...",
+  "uploadingImage": "Uploading...",
+  "uploadFailed": "Upload failed. Tap to retry.",
+  "selectInterestsTitle": "Your Interests",
+  "selectInterestsSubtitle": "Select at least 3 interests to help us find people who share your passions.",
+  "minInterestsError": "Please select at least 3 interests",
+  "enableLocationTitle": "Where are you located?",
+  "enableLocationSubtitle": "Fikir uses your location to discover matches nearby in Ethiopia.",
+  "allowLocation": "Enable GPS Location",
+  "pickCityManually": "Or choose your city manually",
+  "selectCity": "Select City or Sub-city",
+  "moreDetailsTitle": "Tell us more (Optional)",
+  "moreDetailsSubtitle": "Add final details to make your profile stand out.",
+  "religion": "Religion",
+  "bio": "Bio",
+  "bioPlaceholder": "Write something sweet about yourself...",
+  "jobTitle": "Job Title",
+  "finishOnboarding": "Finish & Start Swiping",
+  "skipForNow": "Skip for now",
+  "deleteAccount": "Delete Account",
+  "deleteAccountConfirm": "Are you sure you want to delete your account? Your profile will be hidden immediately and permanently purged after 30 days. You can log in anytime within 30 days to cancel deletion.",
+  "confirmDelete": "Delete My Account",
+  "accountDeleted": "Your account has been scheduled for deletion.",
+  "likeStamp": "LIKE",
+  "nopeStamp": "NOPE",
+  "superLikeStamp": "SUPER LIKE",
+  "boostAction": "Boost",
+  "matchCelebrationTitle": "It's a Match!",
+  "matchSubtitle": "You and {name} liked each other.",
+  "@matchSubtitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "keepSwiping": "Keep Swiping",
+  "sendMessage": "Send Message",
+  "distanceKmAway": "{km} km away",
+  "@distanceKmAway": {
+    "placeholders": {
+      "km": {
+        "type": "int"
+      }
+    }
+  },
+  "enableGps": "Enable GPS",
+  "locationDisabledTitle": "Location Services Needed",
+  "locationDisabledDesc": "Enable GPS to discover matches close to you in Ethiopia.",
+  "dailyLimitTitle": "You're Out of Likes!",
+  "dailyLimitDesc": "You have reached your daily swipe limit. Get unlimited likes with Fikir Gold or wait for reset.",
+  "resetsIn": "Resets in {time}",
+  "@resetsIn": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "getFikirGold": "Get Fikir Gold",
+  "discoverySettings": "Discovery Settings",
+  "maximumDistance": "Maximum Distance: {distance} km",
+  "@maximumDistance": {
+    "placeholders": {
+      "distance": {
+        "type": "int"
+      }
+    }
+  },
+  "ageRangePreference": "Age Range: {min} - {max}",
+  "@ageRangePreference": {
+    "placeholders": {
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "showMe": "Show Me",
+  "verifiedProfilesOnly": "Verified Profiles Only",
+  "applyFilters": "Apply",
+  "reportUser": "Report User",
+  "blockUser": "Block User",
+  "reportReasonInappropriate": "Inappropriate photos or bio",
+  "reportReasonSpam": "Spam or scam account",
+  "reportReasonHarassment": "Harassment or offensive behavior",
+  "reportReasonFake": "Fake profile or impersonation",
+  "reportSubmitted": "Report submitted. Thank you for keeping Fikir safe.",
+  "userBlocked": "User blocked.",
+  "soundEnabled": "Sound On",
+  "soundDisabled": "Sound Off",
+  "pullToRefresh": "Pull to refresh",
+  "likesYouTitle": "Likes You",
+  "seeWhoLikesYou": "See Who Likes You",
+  "upgradeToGoldLikes": "Upgrade to Fikir Gold to see everyone who likes you",
+  "seeEveryone": "See Everyone",
+  "noLikesYet": "No likes yet",
+  "noLikesDesc": "Keep your profile active and updated to get noticed!",
+  "newMatches": "New Matches",
+  "messages": "Messages",
+  "noMatchesYet": "No matches yet",
+  "noMatchesDesc": "Keep swiping to find someone special!",
+  "noChatsYet": "No conversations yet",
+  "noChatsDesc": "When you match with someone, your chats will appear here.",
+  "unmatch": "Unmatch",
+  "unmatchConfirm": "Are you sure you want to unmatch {name}? This cannot be undone.",
+  "@unmatchConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "typing": "typing...",
+  "online": "Online",
+  "safetyBannerTitle": "Fikir Safety Tips",
+  "safetyBannerText": "Never send money or share bank/CBE account numbers. Report suspicious accounts immediately.",
+  "statusSending": "Sending...",
+  "statusSent": "Sent",
+  "statusDelivered": "Delivered",
+  "statusRead": "Read",
+  "statusFailed": "Failed. Tap to retry.",
+  "voiceMessage": "Voice note",
+  "holdToRecord": "Hold to record, release to send",
+  "recordingVoice": "Recording... ({seconds}s)",
+  "@recordingVoice": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "replyingTo": "Replying to {name}",
+  "@replyingTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "typeMessage": "Type a message...",
+  "profileCompleteness": "Profile Completeness",
+  "verifyProfile": "Get Verified",
+  "verifiedBadge": "Verified",
+  "pendingVerification": "Under Review",
+  "verifySubtitle": "Take a quick selfie to get the blue badge.",
+  "takeSelfie": "Take Selfie",
+  "selfieSubmitted": "Selfie submitted for verification. We will review it shortly.",
+  "dataSaverMode": "Data-Saver Mode",
+  "dataSaverDesc": "Reduces mobile data usage by loading smaller images and limiting prefetching",
+  "notificationSettings": "Notifications",
+  "notifyNewMatches": "New Matches",
+  "notifyNewMessages": "New Messages",
+  "notifySuperLikes": "Super Likes",
+  "privacySettings": "Privacy",
+  "hideDistance": "Hide My Distance",
+  "hideOnlineStatus": "Hide Online Status",
+  "blockedUsers": "Blocked Users",
+  "noBlockedUsers": "You have not blocked anyone.",
+  "unblock": "Unblock",
+  "safetyCenter": "Safety Center",
+  "safetyCenterDesc": "Emergency numbers and guidance for dating safely in Ethiopia",
+  "emergencyPolice": "Ethiopian Police: 991",
+  "emergencyRedCross": "Red Cross Ambulance: 907",
+  "muteMatch": "Mute Notifications",
+  "unmuteMatch": "Unmute Notifications"
+}

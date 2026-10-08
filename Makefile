@@ -29,5 +29,12 @@ test: ## Run backend unit and integration tests inside Docker
 lint: ## Run golangci-lint static analysis inside Docker
 	docker run --rm -v $(CURDIR)/backend:/app -v $(HOME)/go/pkg/mod:/go/pkg/mod -w /app fikir-api golangci-lint run --timeout 5m ./...
 
-build-apk: ## Build Flutter Android APK using CirrusLabs Flutter Docker container
-	docker run --rm -v $(CURDIR)/mobile:/app -w /app ghcr.io/cirruslabs/flutter:latest flutter build apk
+mobile-test: ## Run Flutter unit and widget tests
+	cd mobile && flutter test
+
+mobile-lint: ## Run Flutter analyzer
+	cd mobile && flutter analyze
+
+build-apk: ## Build Flutter Android release APKs (split per ABI, obfuscated)
+	cd mobile && flutter build apk --flavor prod -t lib/main_prod.dart --split-per-abi --obfuscate --split-debug-info=build/symbols
+

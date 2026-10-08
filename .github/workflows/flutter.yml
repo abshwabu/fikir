@@ -1,0 +1,91 @@
+name: Flutter CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/flutter.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/flutter.yml'
+
+jobs:
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate Code & Localizations
+        run: |
+          dart run build_runner build --delete-conflicting-outputs
+          flutter gen-l10n
+
+      - name: Run Flutter Analyzer
+        run: flutter analyze
+
+      - name: Run Tests
+        run: flutter test --coverage
+
+  build-apk:
+    name: Build Android Release APKs
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate Code
+        run: |
+          dart run build_runner build --delete-conflicting-outputs
+          flutter gen-l10n
+
+      - name: Build Split Release APKs
+        run: |
+          flutter build apk --flavor prod -t lib/main_prod.dart --split-per-abi --obfuscate --split-debug-info=build/symbols
+
+      - name: Upload APK Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fikir-release-apks
+          path: mobile/build/app/outputs/flutter-apk/*.apk
