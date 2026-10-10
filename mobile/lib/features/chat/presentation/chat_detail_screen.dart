@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fikir/core/database/app_database.dart';
 import 'package:fikir/core/design/colors.dart';
 import 'package:fikir/core/design/widgets/blurhash_image.dart';
+import 'package:fikir/core/design/widgets/full_screen_image_viewer.dart';
 import 'package:fikir/core/network/websocket_manager.dart';
 import 'package:fikir/core/storage/shared_prefs.dart';
 import 'package:fikir/core/utils/image_cache_manager.dart';
@@ -246,17 +247,28 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
         titleSpacing: 0,
         title: Row(
           children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundImage: widget.matchedUserPhotoUrl != null && widget.matchedUserPhotoUrl!.isNotEmpty
-                  ? CachedNetworkImageProvider(
-                      normalizeMediaUrl(widget.matchedUserPhotoUrl),
-                      cacheManager: FikirImageCacheManager.instance,
-                    )
-                  : null,
-              child: (widget.matchedUserPhotoUrl == null || widget.matchedUserPhotoUrl!.isEmpty)
-                  ? Text(widget.matchedUserName.isNotEmpty ? widget.matchedUserName[0] : 'U')
-                  : null,
+            GestureDetector(
+              onTap: () {
+                if (widget.matchedUserPhotoUrl != null && widget.matchedUserPhotoUrl!.isNotEmpty) {
+                  FullScreenImageViewer.open(
+                    context,
+                    imageUrl: widget.matchedUserPhotoUrl,
+                    title: widget.matchedUserName,
+                  );
+                }
+              },
+              child: CircleAvatar(
+                radius: 18,
+                backgroundImage: widget.matchedUserPhotoUrl != null && widget.matchedUserPhotoUrl!.isNotEmpty
+                    ? CachedNetworkImageProvider(
+                        normalizeMediaUrl(widget.matchedUserPhotoUrl),
+                        cacheManager: FikirImageCacheManager.instance,
+                      )
+                    : null,
+                child: (widget.matchedUserPhotoUrl == null || widget.matchedUserPhotoUrl!.isEmpty)
+                    ? Text(widget.matchedUserName.isNotEmpty ? widget.matchedUserName[0] : 'U')
+                    : null,
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -653,29 +665,41 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
     final isLocal = !normalized.startsWith('http') && File(normalized).existsSync();
     final isHttp = normalized.startsWith('http');
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: isLocal
-          ? Image.file(
-              File(normalized),
-              width: 220,
-              height: 220,
-              fit: BoxFit.cover,
-            )
-          : (isHttp
-              ? FikirBlurHashImage(
-                  imageUrl: normalized,
-                  width: 220,
-                  height: 220,
-                )
-              : Container(
-                  width: 220,
-                  height: 220,
-                  color: Colors.grey.shade200,
-                  child: const Center(
-                    child: Icon(Icons.broken_image_outlined, color: Colors.grey, size: 32),
-                  ),
-                )),
+    return GestureDetector(
+      onTap: () {
+        if (isHttp || isLocal) {
+          FullScreenImageViewer.open(
+            context,
+            imageUrl: isHttp ? normalized : null,
+            imageFile: isLocal ? File(normalized) : null,
+            title: isMe ? 'Sent Photo' : widget.matchedUserName,
+          );
+        }
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: isLocal
+            ? Image.file(
+                File(normalized),
+                width: 220,
+                height: 220,
+                fit: BoxFit.cover,
+              )
+            : (isHttp
+                ? FikirBlurHashImage(
+                    imageUrl: normalized,
+                    width: 220,
+                    height: 220,
+                  )
+                : Container(
+                    width: 220,
+                    height: 220,
+                    color: Colors.grey.shade200,
+                    child: const Center(
+                      child: Icon(Icons.broken_image_outlined, color: Colors.grey, size: 32),
+                    ),
+                  )),
+      ),
     );
   }
 

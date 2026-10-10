@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fikir/core/design/colors.dart';
 import 'package:fikir/core/design/widgets/ethiopian_date_picker.dart';
 import 'package:fikir/core/design/widgets/fikir_card.dart';
+import 'package:fikir/core/design/widgets/full_screen_image_viewer.dart';
 import 'package:fikir/core/storage/shared_prefs.dart';
 import 'package:fikir/core/utils/ethiopian_calendar.dart';
 import 'package:fikir/core/utils/ethiopic_numerals.dart';
@@ -121,28 +122,39 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             Center(
               child: Stack(
                 children: [
-                  Container(
-                    width: 106,
-                    height: 106,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: FikirColors.primaryGradient,
-                    ),
-                    padding: const EdgeInsets.all(3),
-                    child: CircleAvatar(
-                      backgroundColor: Colors.grey.shade200,
-                      backgroundImage: (profile?.avatarUrl != null && profile!.avatarUrl!.isNotEmpty)
-                          ? CachedNetworkImageProvider(
-                              normalizeMediaUrl(profile.avatarUrl),
-                              cacheManager: FikirImageCacheManager.instance,
-                            )
-                          : null,
-                      child: (profile?.avatarUrl == null || profile!.avatarUrl!.isEmpty)
-                          ? Text(
-                              (profile?.name.isNotEmpty ?? false ? profile!.name[0].toUpperCase() : 'U'),
-                              style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: FikirColors.primaryCoral),
-                            )
-                          : null,
+                  GestureDetector(
+                    onTap: () {
+                      if (profile?.avatarUrl != null && profile!.avatarUrl!.isNotEmpty) {
+                        FullScreenImageViewer.open(
+                          context,
+                          imageUrl: profile.avatarUrl,
+                          title: profile.name,
+                        );
+                      }
+                    },
+                    child: Container(
+                      width: 106,
+                      height: 106,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: FikirColors.primaryGradient,
+                      ),
+                      padding: const EdgeInsets.all(3),
+                      child: CircleAvatar(
+                        backgroundColor: Colors.grey.shade200,
+                        backgroundImage: (profile?.avatarUrl != null && profile!.avatarUrl!.isNotEmpty)
+                            ? CachedNetworkImageProvider(
+                                normalizeMediaUrl(profile.avatarUrl),
+                                cacheManager: FikirImageCacheManager.instance,
+                              )
+                            : null,
+                        child: (profile?.avatarUrl == null || profile!.avatarUrl!.isEmpty)
+                            ? Text(
+                                (profile?.name.isNotEmpty ?? false ? profile!.name[0].toUpperCase() : 'U'),
+                                style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: FikirColors.primaryCoral),
+                              )
+                            : null,
+                      ),
                     ),
                   ),
                   Positioned(

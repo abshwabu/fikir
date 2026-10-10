@@ -4,6 +4,7 @@ import 'package:fikir/core/constants/ethiopian_data.dart';
 import 'package:fikir/core/design/colors.dart';
 import 'package:fikir/core/design/widgets/blurhash_image.dart';
 import 'package:fikir/core/design/widgets/fikir_card.dart';
+import 'package:fikir/core/design/widgets/full_screen_image_viewer.dart';
 import 'package:fikir/core/design/widgets/gradient_button.dart';
 import 'package:fikir/core/utils/image_compressor.dart';
 import 'package:fikir/features/profile/data/profile_repository.dart';
@@ -540,13 +541,23 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       return Stack(
         fit: StackFit.expand,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: isLocal
-                ? Image.file(File(photo), fit: BoxFit.cover)
-                : FikirBlurHashImage(
-                    imageUrl: photo,
-                  ),
+          GestureDetector(
+            onTap: () {
+              FullScreenImageViewer.open(
+                context,
+                imageUrl: !isLocal ? photo : null,
+                imageFile: isLocal ? File(photo) : null,
+                title: 'Photo ${index + 1}',
+              );
+            },
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: isLocal
+                  ? Image.file(File(photo), fit: BoxFit.cover)
+                  : FikirBlurHashImage(
+                      imageUrl: photo,
+                    ),
+            ),
           ),
           Positioned(
             top: 4,
