@@ -301,6 +301,7 @@ func setupSwipeService() (service.SwipeService, *mockUserRepo, *mockSwipeRepo, *
 		nil, // discoveryRepo
 		swipeCache,
 		nil, // cardCache
+		nil, // deckCache
 		nil, // queueClient
 	)
 

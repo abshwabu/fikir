@@ -90,7 +90,7 @@ func main() {
 	mediaService := service.NewMediaService(profileRepo, storageClient, queueClient, processor, moderator, cfg.CDNBaseURL, cardCache)
 
 	discoveryService := service.NewDiscoveryService(cfg.Discovery, discoveryRepo, profileRepo, deckCache, cardCache, swipeCache, queueClient)
-	swipeService := service.NewSwipeService(cfg.Swipe, userRepo, profileRepo, swipeRepo, matchRepo, blockRepo, reportRepo, discoveryRepo, swipeCache, cardCache, queueClient)
+	swipeService := service.NewSwipeService(cfg.Swipe, userRepo, profileRepo, swipeRepo, matchRepo, blockRepo, reportRepo, discoveryRepo, swipeCache, cardCache, deckCache, queueClient)
 
 	srv := queue.NewServer(cfg.Redis, 10)
 	mux := asynq.NewServeMux()

@@ -58,6 +58,7 @@ type swipeService struct {
 	discoveryRepo domain.DiscoveryRepository
 	swipeCache    cache.SwipeCache
 	cardCache     cache.ProfileCardCache
+	deckCache     cache.DeckCache
 	queueClient   *queue.Client
 }
 
@@ -72,6 +73,7 @@ func NewSwipeService(
 	discoveryRepo domain.DiscoveryRepository,
 	swipeCache cache.SwipeCache,
 	cardCache cache.ProfileCardCache,
+	deckCache cache.DeckCache,
 	queueClient *queue.Client,
 ) SwipeService {
 	return &swipeService{
@@ -85,6 +87,7 @@ func NewSwipeService(
 		discoveryRepo: discoveryRepo,
 		swipeCache:    swipeCache,
 		cardCache:     cardCache,
+		deckCache:     deckCache,
 		queueClient:   queueClient,
 	}
 }
@@ -132,6 +135,9 @@ func (s *swipeService) Swipe(ctx context.Context, swiperID, targetID uuid.UUID, 
 
 	// 3. Fast Redis write path (<20 ms)
 	_ = s.swipeCache.AddSwiped(ctx, swiperID, targetID)
+	if s.deckCache != nil {
+		_ = s.deckCache.Remove(ctx, swiperID, targetID)
+	}
 	if direction == domain.SwipeDirectionLike || direction == domain.SwipeDirectionSuper {
 		_ = s.swipeCache.AddLikeReceived(ctx, targetID, swiperID)
 	}
@@ -145,17 +151,17 @@ func (s *swipeService) Swipe(ctx context.Context, swiperID, targetID uuid.UUID, 
 
 	cache.SwipesProcessedTotal.WithLabelValues(string(direction)).Inc()
 
-	// 4. Asynchronously persist to Postgres via queue
+	// 4. Synchronously persist to Postgres to ensure immediate consistency
+	_ = s.swipeRepo.UpsertSwipe(ctx, &domain.Swipe{
+		SwiperID:  swiperID,
+		TargetID:  targetID,
+		Direction: direction,
+		CreatedAt: now,
+	})
+
+	// Also enqueue to queue if worker queue is attached for notification and background tasks
 	if s.queueClient != nil {
 		_, _ = s.queueClient.EnqueueSwipeRecord(ctx, swiperID, targetID, string(direction), now.Format(time.RFC3339Nano))
-	} else {
-		// Fallback synchronous write if worker queue not attached
-		_ = s.swipeRepo.UpsertSwipe(ctx, &domain.Swipe{
-			SwiperID:  swiperID,
-			TargetID:  targetID,
-			Direction: direction,
-			CreatedAt: now,
-		})
 	}
 
 	// 5. Mutual like detection

@@ -10,7 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  const host = String.fromEnvironment('HOST_OVERRIDE', defaultValue: 'localhost');
+  const host = String.fromEnvironment('HOST_OVERRIDE', defaultValue: '127.0.0.1');
   AppConfig.initialize(
     const AppConfig(
       flavor: AppFlavor.dev,

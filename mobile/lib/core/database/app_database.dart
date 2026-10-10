@@ -241,6 +241,15 @@ class AppDatabase extends _$AppDatabase {
     return (delete(swipeOutbox)..where((tbl) => tbl.id.equals(id))).go();
   }
 
+  Future<void> deleteSwipeByTargetUserId(String targetUserId) {
+    return (delete(swipeOutbox)..where((tbl) => tbl.targetUserId.equals(targetUserId))).go();
+  }
+
+  Future<Set<String>> getAllSwipedUserIds() async {
+    final entries = await select(swipeOutbox).get();
+    return entries.map((e) => e.targetUserId).toSet();
+  }
+
   Future<void> clearSwipeOutbox() {
     return delete(swipeOutbox).go();
   }

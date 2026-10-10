@@ -14,7 +14,7 @@ abstract class SwipeRepository {
     required SwipeDirection direction,
     DiscoveryProfileCard? candidate,
   });
-  Future<bool> rewind();
+  Future<bool> rewind({String? targetUserId});
   Future<int> syncPendingSwipes();
   Stream<SwipeResult> get matchStream;
 }
@@ -26,6 +26,7 @@ class SwipeRepositoryImpl implements SwipeRepository {
   })  : _dio = dio,
         _db = db {
     _initConnectivityListener();
+    syncPendingSwipes();
   }
 
   final Dio _dio;
@@ -79,18 +80,13 @@ class SwipeRepositoryImpl implements SwipeRepository {
     return const SwipeResult(matched: false);
   }
 
-  bool _isValidUuid(String str) {
-    final uuidRegex = RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
-    return uuidRegex.hasMatch(str);
-  }
-
   Future<void> _sendSwipe(
     String swipeId,
     String targetUserId,
     SwipeDirection direction,
     DiscoveryProfileCard? candidate,
   ) async {
-    if (!_isValidUuid(targetUserId)) {
+    if (targetUserId.startsWith('mock-') || targetUserId == 'me') {
       await _db.markSwipeSynced(swipeId);
       return;
     }
@@ -116,15 +112,26 @@ class SwipeRepositoryImpl implements SwipeRepository {
         await _db.markSwipeFailed(swipeId, 'Status ${response.statusCode}');
       }
     } catch (e) {
-      await _db.markSwipeFailed(swipeId, e.toString());
+      if (e is DioException && (e.response?.statusCode == 400 || e.response?.statusCode == 404)) {
+        await _db.markSwipeSynced(swipeId);
+      } else {
+        await _db.markSwipeFailed(swipeId, e.toString());
+      }
     }
   }
 
   @override
-  Future<bool> rewind() async {
+  Future<bool> rewind({String? targetUserId}) async {
+    if (targetUserId != null) {
+      await _db.deleteSwipeByTargetUserId(targetUserId);
+    }
     try {
       final response = await _dio.post<Map<String, dynamic>>('/v1/swipes/rewind');
       if (response.statusCode == 200 && response.data != null) {
+        final resTargetId = response.data!['target_id'] as String?;
+        if (resTargetId != null) {
+          await _db.deleteSwipeByTargetUserId(resTargetId);
+        }
         return (response.data!['undone'] as bool?) ?? true;
       }
       return false;
@@ -140,7 +147,7 @@ class SwipeRepositoryImpl implements SwipeRepository {
     var syncedCount = 0;
 
     for (final item in pending) {
-      if (!_isValidUuid(item.targetUserId)) {
+      if (item.targetUserId.startsWith('mock-') || item.targetUserId == 'me') {
         await _db.markSwipeSynced(item.id);
         continue;
       }
@@ -167,7 +174,11 @@ class SwipeRepositoryImpl implements SwipeRepository {
           await _db.markSwipeFailed(item.id, 'Status ${response.statusCode}');
         }
       } catch (e) {
-        await _db.markSwipeFailed(item.id, e.toString());
+        if (e is DioException && (e.response?.statusCode == 400 || e.response?.statusCode == 404)) {
+          await _db.markSwipeSynced(item.id);
+        } else {
+          await _db.markSwipeFailed(item.id, e.toString());
+        }
       }
     }
 

@@ -62,6 +62,10 @@ func NewManager(cfg config.JWTConfig, authRepo domain.AuthRepository) (*Manager,
 		} else {
 			return nil, fmt.Errorf("invalid ed25519 key size %d; expected %d or %d", len(seed), ed25519.SeedSize, ed25519.PrivateKeySize)
 		}
+	} else if cfg.Secret != "" {
+		hash := sha256.Sum256([]byte(cfg.Secret))
+		priv = ed25519.NewKeyFromSeed(hash[:])
+		pub = priv.Public().(ed25519.PublicKey)
 	} else {
 		// Generate an ephemeral or dev key pair
 		var err error

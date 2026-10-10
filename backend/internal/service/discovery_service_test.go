@@ -94,6 +94,22 @@ func (m *mockDeckCache) Clear(ctx context.Context, userID uuid.UUID) error {
 	return nil
 }
 
+func (m *mockDeckCache) Remove(ctx context.Context, userID, targetID uuid.UUID) error {
+	items := m.decks[userID]
+	newItems := make([]uuid.UUID, 0, len(items))
+	for _, id := range items {
+		if id != targetID {
+			newItems = append(newItems, id)
+		}
+	}
+	m.decks[userID] = newItems
+	return nil
+}
+
+func (m *mockDeckCache) GetIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	return m.decks[userID], nil
+}
+
 type mockCardCache struct {
 	cards map[uuid.UUID]*domain.ProfileCard
 }

@@ -184,6 +184,8 @@ class DiscoveryRepositoryImpl implements DiscoveryRepository {
     int limit = 15,
     DiscoveryFilters? filters,
   }) async {
+    final swipedIds = await _db.getAllSwipedUserIds();
+
     try {
       final queryParams = <String, dynamic>{'limit': limit};
       if (filters != null) {
@@ -206,38 +208,60 @@ class DiscoveryRepositoryImpl implements DiscoveryRepository {
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data!;
         final deckRaw = data['deck'] as List<dynamic>? ?? [];
-        if (deckRaw.isNotEmpty) {
-          final cards = deckRaw
-              .map((c) => DiscoveryProfileCard.fromJson(c as Map<String, dynamic>))
-              .toList();
+        final cards = deckRaw
+            .map((c) => DiscoveryProfileCard.fromJson(c as Map<String, dynamic>))
+            .where((c) => !swipedIds.contains(c.userId))
+            .toList();
 
-          // Cache profiles in Drift
-          for (final card in cards) {
-            await _db.upsertProfile(
-              CachedProfile(
-                id: card.userId,
-                name: card.displayName,
-                bio: card.bio,
-                birthdate: DateTime.now().subtract(Duration(days: card.age * 365)),
-                gender: card.gender,
-                city: card.city,
-                photosJson: jsonEncode(card.photos.map((p) => p.toJson()).toList()),
-                interestsJson: jsonEncode(card.interests),
-                completenessScore: card.completenessScore,
-                isVerified: card.verified,
-                lastActiveAt: card.lastActiveAt,
-                cachedAt: DateTime.now(),
-              ),
-            );
-          }
-          return cards;
+        // Cache profiles in Drift
+        for (final card in cards) {
+          await _db.upsertProfile(
+            CachedProfile(
+              id: card.userId,
+              name: card.displayName,
+              bio: card.bio,
+              birthdate: DateTime.now().subtract(Duration(days: card.age * 365)),
+              gender: card.gender,
+              city: card.city,
+              photosJson: jsonEncode(card.photos.map((p) => p.toJson()).toList()),
+              interestsJson: jsonEncode(card.interests),
+              completenessScore: card.completenessScore,
+              isVerified: card.verified,
+              lastActiveAt: card.lastActiveAt,
+              cachedAt: DateTime.now(),
+            ),
+          );
         }
+        return cards;
       }
     } catch (_) {
-      // In offline / network issue, try loading from Drift cached profiles first
+      // In offline / network issue, try loading unswiped profiles from Drift cache first
+      final myProfile = await _db.getProfile('me');
+      final myGender = myProfile?.gender;
+
       final cached = await _db.getAllProfiles();
-      if (cached.isNotEmpty) {
-        return cached.map((CachedProfile c) {
+      final availableCached = cached.where((c) {
+        // Exclude the 'me' marker profile and any swiped profile
+        if (c.id == 'me' || swipedIds.contains(c.id)) {
+          return false;
+        }
+        // Exclude self cached by user ID
+        if (myProfile != null && (c.name == myProfile.name && c.birthdate == myProfile.birthdate)) {
+          return false;
+        }
+        // Filter by gender preference if available
+        if (filters != null && filters.genderPreference != 'everyone') {
+          final targetGender = filters.genderPreference == 'women' ? 'woman' : 'man';
+          if (c.gender != targetGender) return false;
+        } else if (myGender != null && myGender.isNotEmpty) {
+          final targetGender = myGender == 'man' ? 'woman' : 'man';
+          if (c.gender != targetGender) return false;
+        }
+        return true;
+      }).toList();
+
+      if (availableCached.isNotEmpty) {
+        return availableCached.map((CachedProfile c) {
           var photos = <ProfileCardPhoto>[];
           try {
             final pList = jsonDecode(c.photosJson) as List<dynamic>;
@@ -266,14 +290,22 @@ class DiscoveryRepositoryImpl implements DiscoveryRepository {
           );
         }).toList();
       }
+
+      // Return unswiped mock fallback cards ONLY when offline and no cached profiles exist
+      final myTargetGender = (filters != null && filters.genderPreference != 'everyone')
+          ? (filters.genderPreference == 'women' ? 'woman' : 'man')
+          : (myGender == 'man' ? 'woman' : (myGender == 'woman' ? 'man' : null));
+
+      final availableFallback = fallbackCards.where((c) {
+        if (swipedIds.contains(c.userId)) return false;
+        if (myTargetGender != null && c.gender != myTargetGender) return false;
+        return true;
+      }).toList();
+
+      return availableFallback;
     }
 
-    // Return curated mock cards if deck is otherwise empty (ensures rich initial UX)
-    if (filters != null && filters.genderPreference != 'everyone') {
-      final targetGender = filters.genderPreference == 'women' ? 'woman' : 'man';
-      return fallbackCards.where((c) => c.gender == targetGender).toList();
-    }
-    return List.from(fallbackCards);
+    return [];
   }
 
   @override

@@ -168,6 +168,13 @@ func (s *discoveryService) RefillDeck(ctx context.Context, userID uuid.UUID) err
 	}
 	seenIDs[userID] = true
 
+	// Also exclude candidate IDs currently in the user's Redis deck
+	if existingDeckIDs, err := s.deckCache.GetIDs(ctx, userID); err == nil {
+		for _, id := range existingDeckIDs {
+			seenIDs[id] = true
+		}
+	}
+
 	var collectedCandidates []domain.DiscoveryCandidate
 
 	expandedInterestedIn := make([]string, 0, len(userProfile.InterestedIn)*2)

@@ -208,7 +208,7 @@ func NewRouter(deps ServerDependencies) *chi.Mux {
 		}
 
 		if swipeService == nil && userRepo != nil && profileRepo != nil && swipeRepo != nil && matchRepo != nil && blockRepo != nil && reportRepo != nil && discoveryRepo != nil && swipeCache != nil && cardCache != nil && deps.Config != nil {
-			swipeService = service.NewSwipeService(deps.Config.Swipe, userRepo, profileRepo, swipeRepo, matchRepo, blockRepo, reportRepo, discoveryRepo, swipeCache, cardCache, deps.QueueClient)
+			swipeService = service.NewSwipeService(deps.Config.Swipe, userRepo, profileRepo, swipeRepo, matchRepo, blockRepo, reportRepo, discoveryRepo, swipeCache, cardCache, deckCache, deps.QueueClient)
 		}
 
 		if authService == nil && deps.Redis != nil {

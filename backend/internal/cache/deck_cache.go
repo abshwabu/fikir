@@ -19,6 +19,8 @@ type DeckCache interface {
 	Push(ctx context.Context, userID uuid.UUID, candidateIDs []uuid.UUID, ttl time.Duration) error
 	Len(ctx context.Context, userID uuid.UUID) (int64, error)
 	Clear(ctx context.Context, userID uuid.UUID) error
+	Remove(ctx context.Context, userID, targetID uuid.UUID) error
+	GetIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 }
 
 type redisDeckCache struct {
@@ -98,4 +100,26 @@ func (d *redisDeckCache) Len(ctx context.Context, userID uuid.UUID) (int64, erro
 func (d *redisDeckCache) Clear(ctx context.Context, userID uuid.UUID) error {
 	key := d.deckKey(userID)
 	return d.rdb.Del(ctx, key).Err()
+}
+
+func (d *redisDeckCache) Remove(ctx context.Context, userID, targetID uuid.UUID) error {
+	key := d.deckKey(userID)
+	return d.rdb.LRem(ctx, key, 0, targetID.String()).Err()
+}
+
+func (d *redisDeckCache) GetIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	key := d.deckKey(userID)
+	vals, err := d.rdb.LRange(ctx, key, 0, -1).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]uuid.UUID, 0, len(vals))
+	for _, v := range vals {
+		id, err := uuid.Parse(v)
+		if err == nil {
+			results = append(results, id)
+		}
+	}
+	return results, nil
 }

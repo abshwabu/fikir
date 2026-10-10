@@ -84,7 +84,7 @@ func TestSwipeAndDiscovery_IntegrationSuite(t *testing.T) {
 	swipeCache := cache.NewSwipeCache(harness.Redis)
 
 	discoveryService := service.NewDiscoveryService(cfg.Discovery, discoveryRepo, profileRepo, deckCache, cardCache, swipeCache, nil)
-	swipeService := service.NewSwipeService(cfg.Swipe, userRepo, profileRepo, swipeRepo, matchRepo, blockRepo, reportRepo, discoveryRepo, swipeCache, cardCache, nil)
+	swipeService := service.NewSwipeService(cfg.Swipe, userRepo, profileRepo, swipeRepo, matchRepo, blockRepo, reportRepo, discoveryRepo, swipeCache, cardCache, deckCache, nil)
 
 	router := apphttp.NewRouter(apphttp.ServerDependencies{
 		Config:           cfg,

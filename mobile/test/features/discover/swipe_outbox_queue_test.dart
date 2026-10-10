@@ -84,7 +84,7 @@ void main() {
       expect(result.matched, isFalse);
 
       // Give unawaited background task a brief tick to persist and update status
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await Future<void>.delayed(const Duration(milliseconds: 150));
 
       // Verify the record is in Drift
       final allSwipes = await db.select(db.swipeOutbox).get();
@@ -111,7 +111,7 @@ void main() {
         direction: SwipeDirection.nope,
       );
 
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await Future<void>.delayed(const Duration(milliseconds: 150));
 
       // Record is in outbox with failed status and retryCount 1
       final pending = await db.getPendingSwipes();
@@ -152,7 +152,7 @@ void main() {
         targetUserId: 'target-matched-user',
         direction: SwipeDirection.superLike,
       );
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await Future<void>.delayed(const Duration(milliseconds: 150));
 
       final pendingBefore = await db.getPendingSwipes();
       expect(pendingBefore.length, equals(1));

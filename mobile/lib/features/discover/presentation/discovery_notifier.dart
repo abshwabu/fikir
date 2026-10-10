@@ -185,7 +185,7 @@ class DiscoveryNotifier extends StateNotifier<DiscoveryState> {
       history: remainingHistory,
     );
 
-    await _swipeRepo.rewind();
+    await _swipeRepo.rewind(targetUserId: lastCard.userId);
   }
 
   Future<void> updateFilters(DiscoveryFilters newFilters) async {
