@@ -1,3 +1,7 @@
+import 'dart:math';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:fikir/core/utils/image_cache_manager.dart';
 import 'package:fikir/features/discover/domain/discovery_card.dart';
 import 'package:fikir/features/discover/domain/swipe_action.dart';
 import 'package:fikir/features/discover/domain/swipe_gesture_helper.dart';
@@ -40,6 +44,41 @@ class SwipeableCardStackState extends State<SwipeableCardStack>
           _dragOffsetNotifier.value = _animation!.value;
         }
       });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _precacheNextCards();
+  }
+
+  @override
+  void didUpdateWidget(SwipeableCardStack oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.cards.isNotEmpty &&
+        (oldWidget.cards.isEmpty || oldWidget.cards.first.userId != widget.cards.first.userId)) {
+      _precacheNextCards();
+    }
+  }
+
+  void _precacheNextCards() {
+    if (widget.cards.length > 1) {
+      for (var i = 1; i < min(widget.cards.length, 3); i++) {
+        final url = widget.cards[i].primaryPhotoUrl;
+        if (url.isNotEmpty && mounted) {
+          final normalized = url.startsWith('http://localhost')
+              ? url.replaceFirst('http://localhost', 'http://127.0.0.1')
+              : url;
+          precacheImage(
+            CachedNetworkImageProvider(
+              normalized,
+              cacheManager: FikirImageCacheManager.instance,
+            ),
+            context,
+          );
+        }
+      }
+    }
   }
 
   @override

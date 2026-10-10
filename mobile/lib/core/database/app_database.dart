@@ -76,6 +76,21 @@ class AppDatabase extends _$AppDatabase {
   @override
   int get schemaVersion => 1;
 
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (m) async {
+          await m.createAll();
+          await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_match ON cached_messages(match_id, created_at);');
+          await customStatement('CREATE INDEX IF NOT EXISTS idx_matches_last_msg ON cached_matches(last_message_at);');
+        },
+        beforeOpen: (details) async {
+          await customStatement('PRAGMA journal_mode = WAL;');
+          await customStatement('PRAGMA synchronous = NORMAL;');
+          await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_match ON cached_messages(match_id, created_at);');
+          await customStatement('CREATE INDEX IF NOT EXISTS idx_matches_last_msg ON cached_matches(last_message_at);');
+        },
+      );
+
   static QueryExecutor _openConnection() {
     return driftDatabase(name: 'fikir_cache_db');
   }

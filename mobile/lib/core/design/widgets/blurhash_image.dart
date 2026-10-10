@@ -11,6 +11,8 @@ class FikirBlurHashImage extends StatelessWidget {
     this.height,
     this.fit = BoxFit.cover,
     this.borderRadius,
+    this.memCacheWidth,
+    this.memCacheHeight,
   });
 
   final String imageUrl;
@@ -19,23 +21,45 @@ class FikirBlurHashImage extends StatelessWidget {
   final double? height;
   final BoxFit fit;
   final BorderRadius? borderRadius;
+  final int? memCacheWidth;
+  final int? memCacheHeight;
+
+  int? get _effectiveMemCacheWidth {
+    if (memCacheWidth != null) return memCacheWidth;
+    if (width != null && width! > 0) return (width! * 2).round().clamp(60, 1080);
+    return 720;
+  }
+
+  int? get _effectiveMemCacheHeight {
+    if (memCacheHeight != null) return memCacheHeight;
+    if (height != null && height! > 0) return (height! * 2).round().clamp(60, 1440);
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
     Widget imageWidget;
 
-    if (imageUrl.isEmpty) {
+    final normalizedUrl = imageUrl.startsWith('http://localhost')
+        ? imageUrl.replaceFirst('http://localhost', 'http://127.0.0.1')
+        : imageUrl;
+
+    if (normalizedUrl.isEmpty) {
       imageWidget = _buildPlaceholder();
     } else {
       imageWidget = CachedNetworkImage(
-        imageUrl: imageUrl,
+        imageUrl: normalizedUrl,
         cacheManager: FikirImageCacheManager.instance,
         width: width,
         height: height,
         fit: fit,
+        memCacheWidth: _effectiveMemCacheWidth,
+        memCacheHeight: _effectiveMemCacheHeight,
+        maxWidthDiskCache: 1200,
+        maxHeightDiskCache: 1200,
         placeholder: (context, url) => _buildPlaceholder(),
         errorWidget: (context, url, error) => _buildErrorWidget(),
-        fadeInDuration: const Duration(milliseconds: 250),
+        fadeInDuration: const Duration(milliseconds: 150),
       );
     }
 

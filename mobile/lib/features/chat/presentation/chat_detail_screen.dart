@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fikir/core/database/app_database.dart';
 import 'package:fikir/core/design/colors.dart';
 import 'package:fikir/core/design/widgets/blurhash_image.dart';
 import 'package:fikir/core/network/websocket_manager.dart';
 import 'package:fikir/core/storage/shared_prefs.dart';
+import 'package:fikir/core/utils/image_cache_manager.dart';
 import 'package:fikir/features/chat/data/chat_repository.dart';
 import 'package:fikir/features/matches/data/match_repository.dart';
 import 'package:fikir/features/profile/data/profile_repository.dart';
@@ -77,7 +79,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
     _waveformAnimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
-    )..repeat(reverse: true);
+    );
 
     _messageController.addListener(_onTextChanged);
 
@@ -86,6 +88,21 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
       ref.read(webSocketManagerProvider).connect();
       ref.read(chatRepositoryProvider).markAsRead(widget.matchId);
       ref.read(chatRepositoryProvider).replayMissed(widget.matchId);
+    });
+  }
+
+  void _toggleAudioPlay(String msgId) {
+    setState(() {
+      final wasPlaying = _playingAudioMap[msgId] ?? false;
+      _playingAudioMap[msgId] = !wasPlaying;
+      final anyPlaying = _playingAudioMap.values.any((p) => p == true);
+      if (anyPlaying) {
+        if (!_waveformAnimController.isAnimating) {
+          _waveformAnimController.repeat(reverse: true);
+        }
+      } else {
+        _waveformAnimController.stop();
+      }
     });
   }
 
@@ -101,7 +118,6 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
   }
 
   void _onTextChanged() {
-    setState(() {});
     final text = _messageController.text;
     if (text.isNotEmpty && !_isTypingSent) {
       _isTypingSent = true;
@@ -233,7 +249,14 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
             CircleAvatar(
               radius: 18,
               backgroundImage: widget.matchedUserPhotoUrl != null
-                  ? NetworkImage(widget.matchedUserPhotoUrl!)
+                  ? CachedNetworkImageProvider(
+                      widget.matchedUserPhotoUrl!.startsWith('http://localhost')
+                          ? widget.matchedUserPhotoUrl!.replaceFirst('http://localhost', 'http://127.0.0.1')
+                          : widget.matchedUserPhotoUrl!,
+                      maxWidth: 80,
+                      maxHeight: 80,
+                      cacheManager: FikirImageCacheManager.instance,
+                    )
                   : null,
               child: widget.matchedUserPhotoUrl == null
                   ? Text(widget.matchedUserName.isNotEmpty ? widget.matchedUserName[0] : 'U')
@@ -421,6 +444,14 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
                     controller: _scrollController,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     itemCount: dedupedMessages.length,
+                    addAutomaticKeepAlives: false,
+                    findChildIndexCallback: (Key key) {
+                      if (key is ValueKey<String>) {
+                        final idx = dedupedMessages.indexWhere((m) => m.id == key.value);
+                        if (idx != -1) return idx;
+                      }
+                      return null;
+                    },
                     itemBuilder: (context, index) {
                       final msg = dedupedMessages[index];
                       final isMe = msg.senderId == 'me' ||
@@ -433,12 +464,15 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
                       final showDateSeparator = index == 0 ||
                           !_isSameDay(dedupedMessages[index - 1].createdAt, msg.createdAt);
 
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (showDateSeparator) _buildDateHeader(msg.createdAt),
-                          _buildMessageBubble(msg, isMe),
-                        ],
+                      return RepaintBoundary(
+                        key: ValueKey(msg.id),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (showDateSeparator) _buildDateHeader(msg.createdAt),
+                            _buildMessageBubble(msg, isMe),
+                          ],
+                        ),
                       );
                     },
                   );
@@ -654,11 +688,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
             color: isMe ? Colors.white : FikirColors.primaryCoral,
             size: 32,
           ),
-          onPressed: () {
-            setState(() {
-              _playingAudioMap[msg.id] = !isPlaying;
-            });
-          },
+          onPressed: () => _toggleAudioPlay(msg.id),
         ),
         const SizedBox(width: 8),
         // Waveform Visualizer simulation
@@ -740,9 +770,10 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
               }).toList(),
             ),
           ),
-          Builder(
-            builder: (context) {
-              final hasText = _messageController.text.trim().isNotEmpty;
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _messageController,
+            builder: (context, value, _) {
+              final hasText = value.text.trim().isNotEmpty;
               return Row(
                 children: [
                   // Photo attachment button
@@ -766,7 +797,6 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
                         ),
                         filled: true,
                       ),
-                      onChanged: (_) => setState(() {}),
                       onSubmitted: (_) => _sendMessage(),
                     ),
                   ),
