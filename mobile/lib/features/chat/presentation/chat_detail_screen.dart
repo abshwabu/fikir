@@ -56,6 +56,20 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
 
   // Audio playback simulation state (messageId -> isPlaying)
   final Map<String, bool> _playingAudioMap = {};
+  int _lastMarkedReadId = 0;
+
+  int? _getHighestPartnerMsgId(List<CachedMessage> messages) {
+    int? highest;
+    for (final m in messages) {
+      if (m.senderId != 'me') {
+        final id = int.tryParse(m.id);
+        if (id != null && (highest == null || id > highest)) {
+          highest = id;
+        }
+      }
+    }
+    return highest;
+  }
 
   @override
   void initState() {
@@ -188,7 +202,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
       await repo.sendVoiceMessage(
         matchId: widget.matchId,
         senderId: 'me',
-        filePath: 'voice_note_${DateTime.now().millisecondsSinceEpoch}.m4a',
+        filePath: 'voice_note_${DateTime.now().millisecondsSinceEpoch}.wav',
         durationSec: duration,
       );
       _scrollToBottom();
@@ -355,7 +369,28 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
             Expanded(
               child: messagesAsync.when(
                 data: (messages) {
-                  if (messages.isEmpty) {
+                  // Defensive in-memory deduplication:
+                  // 1) Collect server message IDs and signatures
+                  final serverSignatures = <String>{};
+                  for (final msg in messages) {
+                    if (!msg.id.startsWith('msg_')) {
+                      serverSignatures.add('${msg.matchId}_${msg.content}');
+                    }
+                  }
+
+                  // 2) Deduplicate: keep all server messages; if an optimistic message has matching content, drop it
+                  final seenIds = <String>{};
+                  final dedupedMessages = <CachedMessage>[];
+                  for (final msg in messages) {
+                    if (!seenIds.add(msg.id)) continue;
+                    if (msg.id.startsWith('msg_') &&
+                        serverSignatures.contains('${msg.matchId}_${msg.content}')) {
+                      continue;
+                    }
+                    dedupedMessages.add(msg);
+                  }
+
+                  if (dedupedMessages.isEmpty) {
                     return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -371,14 +406,23 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
                     );
                   }
 
+                  // Auto mark unread partner messages as read
+                  final highestPartnerMsgId = _getHighestPartnerMsgId(dedupedMessages);
+                  if (highestPartnerMsgId != null && highestPartnerMsgId > _lastMarkedReadId) {
+                    _lastMarkedReadId = highestPartnerMsgId;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      ref.read(chatRepositoryProvider).markAsRead(widget.matchId, upToId: highestPartnerMsgId);
+                    });
+                  }
+
                   final currentUserId = ref.watch(myUserProfileProvider).valueOrNull?.id;
 
                   return ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    itemCount: messages.length,
+                    itemCount: dedupedMessages.length,
                     itemBuilder: (context, index) {
-                      final msg = messages[index];
+                      final msg = dedupedMessages[index];
                       final isMe = msg.senderId == 'me' ||
                           (currentUserId != null && msg.senderId == currentUserId) ||
                           (widget.matchedUserId != null &&
@@ -387,7 +431,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
 
                       // Date separator check
                       final showDateSeparator = index == 0 ||
-                          !_isSameDay(messages[index - 1].createdAt, msg.createdAt);
+                          !_isSameDay(dedupedMessages[index - 1].createdAt, msg.createdAt);
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -575,19 +619,22 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
   }
 
   Widget _buildImageContent(String mediaUrl, bool isMe) {
-    final isLocal = File(mediaUrl).existsSync();
+    final normalized = mediaUrl.startsWith('http://localhost')
+        ? mediaUrl.replaceFirst('http://localhost', 'http://127.0.0.1')
+        : mediaUrl;
+    final isLocal = File(normalized).existsSync();
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: isLocal
           ? Image.file(
-              File(mediaUrl),
+              File(normalized),
               width: 220,
               height: 220,
               fit: BoxFit.cover,
             )
           : FikirBlurHashImage(
-              imageUrl: mediaUrl,
+              imageUrl: normalized,
               width: 220,
               height: 220,
             ),

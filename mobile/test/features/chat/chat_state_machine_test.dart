@@ -205,5 +205,124 @@ void main() {
         ]),
       );
     });
+
+    test('sendMessage reconciles client_msg_id with server id on REST delivery', () async {
+      dio.httpClientAdapter = MockHttpClientAdapter((options) async {
+        if (options.path.contains('/messages')) {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'id': 42,
+              'client_msg_id': options.data != null
+                  ? (options.data as Map)['client_msg_id']
+                  : 'unknown',
+              'status': 'sent',
+            }),
+            201,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        }
+        return ResponseBody.fromString('{}', 200);
+      });
+
+      final repo = ChatRepository(dio, db, wsManager);
+      final clientMsgId = await repo.sendMessage(
+        matchId: 'match-reconcile',
+        senderId: 'me',
+        content: 'Hello there!',
+      );
+
+      final messages = await db.getMessagesForMatch('match-reconcile');
+      // Exactly 1 message must exist, with the server ID '42'
+      expect(messages.length, equals(1));
+      expect(messages.first.id, equals('42'));
+      expect(messages.first.content, equals('Hello there!'));
+      expect(messages.first.status, equals('sent'));
+      expect(messages.any((m) => m.id == clientMsgId), isFalse);
+    });
+
+    test('Reconciles optimistic message when _refreshMessages returns server messages', () async {
+      final repo = ChatRepository(dio, db, wsManager);
+
+      // 1. Manually insert an optimistic message
+      const clientMsgId = 'msg_temp_123';
+      await db.upsertMessage(
+        CachedMessage(
+          id: clientMsgId,
+          matchId: 'match-dedupe',
+          senderId: 'me',
+          type: 'text',
+          content: 'Optimistic message',
+          status: 'sent',
+          createdAt: DateTime.now(),
+          cachedAt: DateTime.now(),
+        ),
+      );
+
+      // Verify it exists
+      var messages = await db.getMessagesForMatch('match-dedupe');
+      expect(messages.length, equals(1));
+      expect(messages.first.id, equals(clientMsgId));
+
+      // 2. Server returns the persisted message with server ID 99 and client_msg_id
+      dio.httpClientAdapter = MockHttpClientAdapter((options) async {
+        return ResponseBody.fromString(
+          jsonEncode({
+            'messages': [
+              {
+                'id': 99,
+                'client_msg_id': clientMsgId,
+                'sender_id': 'user-me-uuid',
+                'content': 'Optimistic message',
+                'type': 'text',
+                'status': 'sent',
+                'created_at': DateTime.now().toIso8601String(),
+              },
+            ],
+          }),
+          200,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
+        );
+      });
+
+      // Stream triggers _refreshMessages
+      final stream = repo.watchMessages('match-dedupe');
+      await stream.first;
+      // Allow async _refreshMessages to complete
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      messages = await db.getMessagesForMatch('match-dedupe');
+      // No duplicate messages! Exactly 1 message with server ID 99
+      expect(messages.length, equals(1));
+      expect(messages.first.id, equals('99'));
+      expect(messages.first.content, equals('Optimistic message'));
+      expect(messages.any((m) => m.id == clientMsgId), isFalse);
+    });
+
+    test('markMessagesReadUpTo marks sent messages as read', () async {
+      await db.upsertMessage(
+        CachedMessage(
+          id: '50',
+          matchId: 'match-read-test',
+          senderId: 'me',
+          type: 'text',
+          content: 'Did you get this?',
+          status: 'sent',
+          createdAt: DateTime.now(),
+          cachedAt: DateTime.now(),
+        ),
+      );
+
+      var messages = await db.getMessagesForMatch('match-read-test');
+      expect(messages.first.status, equals('sent'));
+
+      await db.markMessagesReadUpTo('match-read-test', 50);
+
+      messages = await db.getMessagesForMatch('match-read-test');
+      expect(messages.first.status, equals('read'));
+    });
   });
 }

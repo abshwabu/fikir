@@ -235,8 +235,19 @@ class WebSocketManager {
         final mediaUrl = frame['media_url'] as String?;
         final mediaDuration = (frame['media_duration'] as num?)?.toInt();
         final clientMsgId = frame['client_msg_id'] as String?;
-        final messageIdStr = frame['message_id']?.toString() ?? 'msg_${DateTime.now().millisecondsSinceEpoch}';
-        final id = clientMsgId ?? messageIdStr;
+        final serverId = frame['message_id']?.toString();
+        final id = serverId ?? clientMsgId ?? 'msg_${DateTime.now().millisecondsSinceEpoch}';
+
+        // Reconcile/delete optimistic client message if server ID is present
+        if (clientMsgId != null && serverId != null && clientMsgId != serverId) {
+          await _db.deleteMessage(clientMsgId);
+        }
+
+        final normalizedMediaUrl = mediaUrl != null
+            ? (mediaUrl.startsWith('http://localhost')
+                ? mediaUrl.replaceFirst('http://localhost', 'http://127.0.0.1')
+                : mediaUrl)
+            : null;
         final createdAt = frame['created_at'] != null
             ? DateTime.tryParse(frame['created_at'] as String) ?? DateTime.now()
             : DateTime.now();
@@ -247,7 +258,7 @@ class WebSocketManager {
           senderId: senderId,
           type: msgType,
           content: body,
-          mediaUrl: mediaUrl,
+          mediaUrl: normalizedMediaUrl,
           mediaDuration: mediaDuration,
           status: 'delivered',
           createdAt: createdAt,
@@ -268,15 +279,30 @@ class WebSocketManager {
 
       case 'message.ack':
         final clientMsgId = frame['client_msg_id'] as String?;
+        final serverId = frame['message_id']?.toString();
         final status = (frame['status'] as String?) ?? 'sent';
         if (clientMsgId != null) {
-          await _db.updateMessageStatus(clientMsgId, status);
+          if (serverId != null && serverId != clientMsgId) {
+            await _db.reconcileMessageId(
+              clientMsgId: clientMsgId,
+              serverId: serverId,
+              status: status,
+            );
+          } else {
+            await _db.updateMessageStatus(clientMsgId, status);
+          }
         }
 
       case 'read':
         final matchId = frame['match_id'] as String?;
+        final upToId = (frame['up_to_id'] as num?)?.toInt();
         if (matchId != null) {
           await _db.markMatchRead(matchId);
+          if (upToId != null) {
+            await _db.markMessagesReadUpTo(matchId, upToId);
+          } else {
+            await _db.markAllSentMessagesRead(matchId);
+          }
         }
 
       case 'typing':
@@ -431,8 +457,21 @@ class WebSocketManager {
         final list = (response.data!['messages'] as List<dynamic>?) ?? [];
         for (final item in list) {
           if (item is Map<String, dynamic>) {
-            final id = item['id']?.toString() ?? item['client_msg_id'] as String?;
+            final serverId = item['id']?.toString();
+            final clientMsgId = item['client_msg_id'] as String?;
+            final id = serverId ?? clientMsgId;
             if (id == null) continue;
+
+            if (clientMsgId != null && serverId != null && clientMsgId != serverId) {
+              await _db.deleteMessage(clientMsgId);
+            }
+
+            final mediaUrl = item['media_url'] as String?;
+            final normalizedMediaUrl = mediaUrl != null
+                ? (mediaUrl.startsWith('http://localhost')
+                    ? mediaUrl.replaceFirst('http://localhost', 'http://127.0.0.1')
+                    : mediaUrl)
+                : null;
 
             final msg = CachedMessage(
               id: id,
@@ -440,7 +479,7 @@ class WebSocketManager {
               senderId: (item['sender_id'] as String?) ?? '',
               type: (item['type'] as String?) ?? 'text',
               content: (item['content'] as String?) ?? (item['body'] as String?) ?? '',
-              mediaUrl: item['media_url'] as String?,
+              mediaUrl: normalizedMediaUrl,
               mediaDuration: (item['media_duration'] as num?)?.toInt(),
               status: (item['status'] as String?) ?? 'delivered',
               createdAt: item['created_at'] != null

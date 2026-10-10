@@ -4,7 +4,6 @@ import 'package:drift/native.dart';
 import 'package:fikir/core/database/app_database.dart';
 import 'package:fikir/features/discover/data/discovery_repository.dart';
 import 'package:fikir/features/discover/data/swipe_repository.dart';
-import 'package:fikir/features/discover/domain/discovery_card.dart';
 import 'package:fikir/features/discover/domain/swipe_action.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -57,8 +56,8 @@ void main() {
                 'age': 25,
                 'gender': 'man',
                 'distance_km': 2.0,
-                'photos': [],
-                'interests': [],
+                'photos': <String>[],
+                'interests': <String>[],
               },
               {
                 'user_id': 'user-2',
@@ -66,10 +65,10 @@ void main() {
                 'age': 24,
                 'gender': 'woman',
                 'distance_km': 3.0,
-                'photos': [],
-                'interests': [],
+                'photos': <String>[],
+                'interests': <String>[],
               },
-            ]
+            ],
           }),
           200,
           headers: {
@@ -92,7 +91,7 @@ void main() {
     test('Returns empty list when server returns empty deck (does not fall through to fallback cards)', () async {
       dio.httpClientAdapter = MockHttpClientAdapter((options) async {
         return ResponseBody.fromString(
-          jsonEncode({'deck': []}),
+          jsonEncode({'deck': <Map<String, dynamic>>[]}),
           200,
           headers: {
             Headers.contentTypeHeader: [Headers.jsonContentType],

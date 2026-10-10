@@ -200,6 +200,51 @@ class AppDatabase extends _$AppDatabase {
         .write(CachedMessagesCompanion(status: Value(status)));
   }
 
+  Future<void> deleteMessage(String id) {
+    return (delete(cachedMessages)..where((tbl) => tbl.id.equals(id))).go();
+  }
+
+  /// Reconciles an optimistic temporary message (clientMsgId) with the official serverId.
+  Future<void> reconcileMessageId({
+    required String clientMsgId,
+    required String serverId,
+    String? status,
+  }) async {
+    final existing = await (select(cachedMessages)..where((tbl) => tbl.id.equals(clientMsgId))).getSingleOrNull();
+    if (existing != null) {
+      await (delete(cachedMessages)..where((tbl) => tbl.id.equals(clientMsgId))).go();
+      await into(cachedMessages).insertOnConflictUpdate(
+        existing.copyWith(
+          id: serverId,
+          status: status ?? existing.status,
+          cachedAt: DateTime.now(),
+        ),
+      );
+    }
+  }
+
+  /// Marks messages as read up to a server message ID.
+  Future<void> markMessagesReadUpTo(String matchId, int upToId) async {
+    final msgs = await (select(cachedMessages)..where((tbl) => tbl.matchId.equals(matchId))).get();
+    for (final msg in msgs) {
+      final msgIntId = int.tryParse(msg.id);
+      if (msgIntId != null && msgIntId <= upToId) {
+        await (update(cachedMessages)..where((tbl) => tbl.id.equals(msg.id)))
+            .write(const CachedMessagesCompanion(status: Value('read')));
+      } else if (msg.senderId == 'me' && (msgIntId == null || msgIntId <= upToId)) {
+        await (update(cachedMessages)..where((tbl) => tbl.id.equals(msg.id)))
+            .write(const CachedMessagesCompanion(status: Value('read')));
+      }
+    }
+  }
+
+  /// Marks all sent messages as read in this conversation.
+  Future<void> markAllSentMessagesRead(String matchId) async {
+    await (update(cachedMessages)
+          ..where((tbl) => tbl.matchId.equals(matchId) & tbl.senderId.equals('me')))
+        .write(const CachedMessagesCompanion(status: Value('read')));
+  }
+
   Future<void> clearMessagesForMatch(String matchId) {
     return (delete(cachedMessages)..where((tbl) => tbl.matchId.equals(matchId))).go();
   }
