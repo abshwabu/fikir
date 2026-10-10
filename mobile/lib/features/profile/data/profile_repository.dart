@@ -167,7 +167,11 @@ class UserProfile {
   final int completenessScore;
   final bool isVerified;
 
-  String? get avatarUrl => photos.isNotEmpty ? photos.first.url : null;
+  String? get avatarUrl {
+    final valid = photos.where((p) => p.url.isNotEmpty);
+    if (valid.isNotEmpty) return valid.first.url;
+    return null;
+  }
 
   Map<String, dynamic> toJson() => {
     'user_id': id,

@@ -66,9 +66,7 @@ class SwipeableCardStackState extends State<SwipeableCardStack>
       for (var i = 1; i < min(widget.cards.length, 3); i++) {
         final url = widget.cards[i].primaryPhotoUrl;
         if (url.isNotEmpty && mounted) {
-          final normalized = url.startsWith('http://localhost')
-              ? url.replaceFirst('http://localhost', 'http://127.0.0.1')
-              : url;
+          final normalized = normalizeMediaUrl(url);
           precacheImage(
             CachedNetworkImageProvider(
               normalized,

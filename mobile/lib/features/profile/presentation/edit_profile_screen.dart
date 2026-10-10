@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:fikir/core/constants/ethiopian_data.dart';
 import 'package:fikir/core/design/colors.dart';
+import 'package:fikir/core/design/widgets/blurhash_image.dart';
 import 'package:fikir/core/design/widgets/fikir_card.dart';
 import 'package:fikir/core/design/widgets/gradient_button.dart';
 import 'package:fikir/core/utils/image_compressor.dart';
@@ -543,13 +544,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             borderRadius: BorderRadius.circular(12),
             child: isLocal
                 ? Image.file(File(photo), fit: BoxFit.cover)
-                : Image.network(
-                    photo,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const ColoredBox(
-                      color: Colors.black12,
-                      child: Icon(Icons.broken_image, color: Colors.grey),
-                    ),
+                : FikirBlurHashImage(
+                    imageUrl: photo,
                   ),
           ),
           Positioned(

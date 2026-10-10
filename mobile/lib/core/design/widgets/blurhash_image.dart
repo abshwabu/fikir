@@ -24,25 +24,11 @@ class FikirBlurHashImage extends StatelessWidget {
   final int? memCacheWidth;
   final int? memCacheHeight;
 
-  int? get _effectiveMemCacheWidth {
-    if (memCacheWidth != null) return memCacheWidth;
-    if (width != null && width! > 0) return (width! * 2).round().clamp(60, 1080);
-    return 720;
-  }
-
-  int? get _effectiveMemCacheHeight {
-    if (memCacheHeight != null) return memCacheHeight;
-    if (height != null && height! > 0) return (height! * 2).round().clamp(60, 1440);
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
     Widget imageWidget;
 
-    final normalizedUrl = imageUrl.startsWith('http://localhost')
-        ? imageUrl.replaceFirst('http://localhost', 'http://127.0.0.1')
-        : imageUrl;
+    final normalizedUrl = normalizeMediaUrl(imageUrl);
 
     if (normalizedUrl.isEmpty) {
       imageWidget = _buildPlaceholder();
@@ -53,12 +39,10 @@ class FikirBlurHashImage extends StatelessWidget {
         width: width,
         height: height,
         fit: fit,
-        memCacheWidth: _effectiveMemCacheWidth,
-        memCacheHeight: _effectiveMemCacheHeight,
-        maxWidthDiskCache: 1200,
-        maxHeightDiskCache: 1200,
+        memCacheWidth: memCacheWidth,
+        memCacheHeight: memCacheHeight,
         placeholder: (context, url) => _buildPlaceholder(),
-        errorWidget: (context, url, error) => _buildErrorWidget(),
+        errorWidget: (context, url, error) => _buildErrorWidget(url, error),
         fadeInDuration: const Duration(milliseconds: 150),
       );
     }
@@ -98,7 +82,8 @@ class FikirBlurHashImage extends StatelessWidget {
     );
   }
 
-  Widget _buildErrorWidget() {
+  Widget _buildErrorWidget(String url, Object? error) {
+    debugPrint('[BlurHashImage] Failed to load image $url: $error');
     return Container(
       width: width,
       height: height,

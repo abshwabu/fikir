@@ -248,17 +248,13 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
           children: [
             CircleAvatar(
               radius: 18,
-              backgroundImage: widget.matchedUserPhotoUrl != null
+              backgroundImage: widget.matchedUserPhotoUrl != null && widget.matchedUserPhotoUrl!.isNotEmpty
                   ? CachedNetworkImageProvider(
-                      widget.matchedUserPhotoUrl!.startsWith('http://localhost')
-                          ? widget.matchedUserPhotoUrl!.replaceFirst('http://localhost', 'http://127.0.0.1')
-                          : widget.matchedUserPhotoUrl!,
-                      maxWidth: 80,
-                      maxHeight: 80,
+                      normalizeMediaUrl(widget.matchedUserPhotoUrl),
                       cacheManager: FikirImageCacheManager.instance,
                     )
                   : null,
-              child: widget.matchedUserPhotoUrl == null
+              child: (widget.matchedUserPhotoUrl == null || widget.matchedUserPhotoUrl!.isEmpty)
                   ? Text(widget.matchedUserName.isNotEmpty ? widget.matchedUserName[0] : 'U')
                   : null,
             ),
@@ -653,10 +649,9 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
   }
 
   Widget _buildImageContent(String mediaUrl, bool isMe) {
-    final normalized = mediaUrl.startsWith('http://localhost')
-        ? mediaUrl.replaceFirst('http://localhost', 'http://127.0.0.1')
-        : mediaUrl;
-    final isLocal = File(normalized).existsSync();
+    final normalized = normalizeMediaUrl(mediaUrl);
+    final isLocal = !normalized.startsWith('http') && File(normalized).existsSync();
+    final isHttp = normalized.startsWith('http');
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
@@ -667,11 +662,20 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> with Ticker
               height: 220,
               fit: BoxFit.cover,
             )
-          : FikirBlurHashImage(
-              imageUrl: normalized,
-              width: 220,
-              height: 220,
-            ),
+          : (isHttp
+              ? FikirBlurHashImage(
+                  imageUrl: normalized,
+                  width: 220,
+                  height: 220,
+                )
+              : Container(
+                  width: 220,
+                  height: 220,
+                  color: Colors.grey.shade200,
+                  child: const Center(
+                    child: Icon(Icons.broken_image_outlined, color: Colors.grey, size: 32),
+                  ),
+                )),
     );
   }
 
